@@ -19,7 +19,7 @@ TRANSLATIONS = {
     "Status": "상태",
     "Progressing...": "처리 중...",
     "Launcher started. Monitoring servers...": "런처 시작. 서버 모니터링 중...",
-    "All Servers": "모든 서버",
+    "All Servers": "모듈",
     "Stop All": "모두 정지",
     "Start All": "모두 시작",
     "Unknown": "알 수 없음",
