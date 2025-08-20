@@ -34,6 +34,9 @@ TRANSLATIONS = {
     "Quit confirmed. Initiating server shutdown...": "종료 확인됨. 서버 종료 시작 중...",
     "Quit cancelled.": "종료 취소됨.",
     "Server Running": "서버 실행 중",
+    "모두 정지 후 종료": "모두 정지 후 종료",
+    "강제 종료": "강제 종료",
+    "런처 종료": "런처 종료",
     "All servers stop commands issued. Exiting application in 2 seconds...": "모든 서버 정지 명령이 실행되었습니다. 2초 후 애플리케이션 종료...",
     "Server Configuration": "서버 설정",
     "Server Name": "서버 이름",
@@ -557,22 +560,45 @@ class ServerLauncher(ctk.CTk):
             time.sleep(5)
 
     def on_quit_button_click(self):
-        msg = CTkMessagebox(title="Quit Application", message="모든 서버가 닫힙니다 확실합니까?",
-                            icon="question", option_1="취소", option_2="확인")
-        response = msg.get()
-        
-        if response == "확인":
-            self.log("Quit confirmed. Initiating server shutdown...")
-            shutdown_thread = threading.Thread(target=self._perform_shutdown_and_exit)
-            shutdown_thread.daemon = True
-            shutdown_thread.start()
+        # Check if any server is running
+        running_servers = []
+        for name in SERVER_CONFIG.keys():
+            if name == "auto_restart_enabled": continue # Skip the config entry
+            status = self.check_server_status(name)
+            if status == _("Running"):
+                running_servers.append(name)
+
+        if running_servers:
+            # Some servers are running, ask user what to do
+            message = f"다음 서버들이 실행 중입니다: {', '.join(running_servers)}\n모두 정지하고 종료하시겠습니까? 또는 강제 종료하시겠습니까?"
+            msg = CTkMessagebox(title=_("Server Running"), message=message,
+                                icon="question", option_1=_("취소"), option_2=_("모두 정지 후 종료"), option_3=_("강제 종료"))
+            response = msg.get()
+
+            if response == _("모두 정지 후 종료"):
+                self.log("User chose to stop all servers and exit.")
+                # _perform_shutdown_and_exit already calls stop_all_servers and then destroys
+                shutdown_thread = threading.Thread(target=self._perform_shutdown_and_exit, daemon=True)
+                shutdown_thread.start()
+            elif response == _("강제 종료"):
+                self.log("User chose to force exit. Terminating launcher immediately.")
+                self.after(0, self.destroy) # Force exit
+            elif response == _("취소"):
+                self.log("Quit cancelled by user.")
         else:
-            self.log("Quit cancelled.")
+            # All servers are stopped, ask for simple confirmation to exit
+            msg = CTkMessagebox(title=_("런처 종료"), message=_("런처를 종료하시겠습니까?"),
+                                icon="question", option_1=_("취소"), option_2=_("확인"))
+            response = msg.get()
+            if response == _("확인"):
+                self.log("All servers are stopped. Exiting launcher.")
+                self.after(0, self.destroy)
+            else:
+                self.log("Quit cancelled by user.")
 
     def _perform_shutdown_and_exit(self):
         self.stop_all_servers()
-        self.log("All servers stop commands issued. Exiting application in 2 seconds...")
-        time.sleep(2)
+        self.log("All servers stop commands issued. Exiting application...")
         self.after(0, self.destroy)
 
 class ConfigWindow(ctk.CTkToplevel):
