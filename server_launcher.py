@@ -82,6 +82,14 @@ def load_config():
             "type": "service",
             "service_name": "MySQL84",
         },
+        # "MySQL_Process_Example": { # Uncomment and modify to use MySQL as a process
+        #     "type": "process",
+        #     "process_name": "mysqld.exe",
+        #     "start_cmd": ["C:\\xampp\\mysql\\bin\\mysqld.exe", "--console"], # Example path, adjust as needed
+        #     "stop_cmd": ["taskkill", "/F", "/IM", "mysqld.exe"], # Example stop command
+        #     "cwd": "C:\\xampp\\mysql\\bin", # Example working directory
+        #     "show_console": True,
+        # },
         "Apache": {
             "type": "process",
             "process_name": "httpd.exe",
@@ -156,12 +164,7 @@ def save_config(config_data):
             saveable_config[server_name] = server_data
             continue
         saveable_config[server_name] = server_data.copy()
-        if saveable_config[server_name].get("type") == "process":
-            # Convert start_cmd/stop_cmd back to string for saving if they are lists
-            if "start_cmd" in saveable_config[server_name] and isinstance(saveable_config[server_name]["start_cmd"], list):
-                saveable_config[server_name]["start_cmd"] = saveable_config[server_name]["start_cmd"][0]
-            if "stop_cmd" in saveable_config[server_name] and isinstance(saveable_config[server_name]["stop_cmd"], list):
-                saveable_config[server_name]["stop_cmd"] = saveable_config[server_name]["stop_cmd"][0]
+        # No need to convert start_cmd/stop_cmd back to string, they are always lists now.
 
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -177,8 +180,8 @@ class ServerLauncher(ctk.CTk):
         super().__init__()
 
         self.title(_("WISE Server Launcher"))
-        self.geometry("1000x850")
-        self.minsize(1000, 850)
+        self.geometry("1000x580")
+        self.minsize(1000, 580)
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("blue")
 
@@ -218,18 +221,18 @@ class ServerLauncher(ctk.CTk):
 
         # --- Log Box ---
         log_frame = ctk.CTkFrame(main_frame)
-        log_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        log_frame.pack(fill="x", expand=False, padx=10, pady=10)
         log_label = ctk.CTkLabel(log_frame, text=_("Logs"), font=ctk.CTkFont(family="맑은 고딕", size=14))
         log_label.pack(anchor="w", padx=10, pady=(5,0))
-        self.log_box = ctk.CTkTextbox(log_frame, state="disabled", height=25, font=ctk.CTkFont(family="맑은 고딕", size=12)) # Set initial height to very small
+        self.log_box = ctk.CTkTextbox(log_frame, state="disabled", height=100, font=ctk.CTkFont(family="맑은 고딕", size=12))
         self.log_box.pack(fill="both", expand=True, padx=10, pady=10)
 
         # --- Quit Button ---
-        quit_button = ctk.CTkButton(main_frame, text=_("Quit"), command=self.on_quit_button_click, fg_color="#FF5722", hover_color="#E64A19", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold"))
+        quit_button = ctk.CTkButton(main_frame, text=_("Quit"), command=self.on_quit_button_click, fg_color="#FF5722", hover_color="#E64A19", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold"), corner_radius=0)
         quit_button.pack(side="right", pady=10, padx=5)
 
         # --- Config Button ---
-        config_button = ctk.CTkButton(main_frame, text=_("Config"), command=self.open_config_window, font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold"))
+        config_button = ctk.CTkButton(main_frame, text=_("Config"), command=self.open_config_window, font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold"), corner_radius=0)
         config_button.pack(side="right", pady=10, padx=5)
 
         # --- Start Monitoring ---
@@ -266,11 +269,11 @@ class ServerLauncher(ctk.CTk):
         status_label.grid(row=row, column=2, padx=10, pady=5, sticky="w")
 
         # Start Button
-        start_button = ctk.CTkButton(parent, text=_("Start"), command=lambda n=name: self.start_server(n), fg_color="#43A047", hover_color="#2E7D32", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
+        start_button = ctk.CTkButton(parent, text=_("Start"), command=lambda n=name: self.start_server(n), fg_color="#43A047", hover_color="#2E7D32", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         start_button.grid(row=row, column=3, padx=5, pady=5)
 
         # Stop Button
-        stop_button = ctk.CTkButton(parent, text=_("Stop"), command=lambda n=name: self.stop_server(n), fg_color="#D32F2F", hover_color="#B71C1C", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
+        stop_button = ctk.CTkButton(parent, text=_("Stop"), command=lambda n=name: self.stop_server(n), fg_color="#D32F2F", hover_color="#B71C1C", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         stop_button.grid(row=row, column=4, padx=5, pady=5)
 
         self.server_widgets[name] = {
@@ -291,10 +294,10 @@ class ServerLauncher(ctk.CTk):
         status_header = ctk.CTkLabel(parent, text=_("Status"), font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
         status_header.grid(row=row, column=2, padx=10, pady=2, sticky="w")
 
-        self.start_all_button = ctk.CTkButton(parent, text=_("Start All"), command=lambda: self.start_all_servers(), fg_color="#4CAF50", hover_color="#388E3C", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
+        self.start_all_button = ctk.CTkButton(parent, text=_("Start All"), command=lambda: self.start_all_servers(), fg_color="#4CAF50", hover_color="#388E3C", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         self.start_all_button.grid(row=row, column=3, padx=5, pady=5)
 
-        self.stop_all_button = ctk.CTkButton(parent, text=_("Stop All"), command=lambda: self.stop_all_servers(), fg_color="#F44336", hover_color="#B71C1C", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
+        self.stop_all_button = ctk.CTkButton(parent, text=_("Stop All"), command=lambda: self.stop_all_servers(), fg_color="#F44336", hover_color="#B71C1C", width=80, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         self.stop_all_button.grid(row=row, column=4, padx=5, pady=5)
 
     def log(self, message, level="info"):
@@ -606,61 +609,69 @@ class ConfigWindow(ctk.CTkToplevel):
         super().__init__(master)
         self.master = master
         self.title("Server Configuration")
-        self.geometry("700x500")
+        self.geometry("950x600")
         self.grab_set()
 
         self.path_entries = {}
 
+        self.server_config_widgets = {} # New dictionary to store widgets for each server
+
         main_frame = ctk.CTkFrame(self)
         main_frame.pack(pady=20, padx=20, fill="both", expand=True)
 
-        scrollable_config_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
-        scrollable_config_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        self.scrollable_config_frame = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+        self.scrollable_config_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        ctk.CTkLabel(scrollable_config_frame, text="Server Name", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        ctk.CTkLabel(scrollable_config_frame, text="Type", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        ctk.CTkLabel(scrollable_config_frame, text="Executable/Service Path", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        ctk.CTkLabel(self.scrollable_config_frame, text="Server Name", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ctk.CTkLabel(self.scrollable_config_frame, text="Type", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        ctk.CTkLabel(self.scrollable_config_frame, text="Executable/Service Path", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=2, padx=5, pady=5, sticky="w")
         
         row_num = 1
         for name, config in SERVER_CONFIG.items():
             if name == "auto_restart_enabled": # Skip this for now, handled separately
                 continue
-            ctk.CTkLabel(scrollable_config_frame, text=name, font=ctk.CTkFont(family="맑은 고딕", size=12)).grid(row=row_num, column=0, padx=5, pady=2, sticky="w")
-            ctk.CTkLabel(scrollable_config_frame, text=config["type"].capitalize(), font=ctk.CTkFont(family="맑은 고딕", size=12)).grid(row=row_num, column=1, padx=5, pady=2, sticky="w")
+            ctk.CTkLabel(self.scrollable_config_frame, text=name, font=ctk.CTkFont(family="맑은 고딕", size=12)).grid(row=row_num, column=0, padx=5, pady=2, sticky="w")
+            
+            # Type selection dropdown
+            type_optionmenu = ctk.CTkOptionMenu(self.scrollable_config_frame, values=["process", "service"],
+                                                command=lambda value, n=name, r=row_num: self._on_type_change(value, n, r),
+                                                font=ctk.CTkFont(family="맑은 고딕", size=12), corner_radius=0)
+            type_optionmenu.set(config["type"]) # Set initial value
+            type_optionmenu.grid(row=row_num, column=1, padx=5, pady=2, sticky="w")
 
-            if config["type"] == "process":
-                path_entry = ctk.CTkEntry(scrollable_config_frame, width=350, font=ctk.CTkFont(family="맑은 고딕", size=12))
-                path_entry.grid(row=row_num, column=2, padx=5, pady=2, sticky="ew")
-                path_entry.insert(0, config["start_cmd"][0] if config["start_cmd"] else "")
-                self.path_entries[name] = path_entry
-
-                browse_button = ctk.CTkButton(scrollable_config_frame, text="Browse", width=70, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
-                                              command=lambda entry=path_entry: self._browse_path(entry))
-                browse_button.grid(row=row_num, column=3, padx=5, pady=2)
-            elif config["type"] == "service":
-                service_name_label = ctk.CTkLabel(scrollable_config_frame, text=config["service_name"], font=ctk.CTkFont(family="맑은 고딕", size=12))
-                service_name_label.grid(row=row_num, column=2, padx=5, pady=2, sticky="w")
+            # Store widgets for dynamic access
+            self.server_config_widgets[name] = {
+                "type_optionmenu": type_optionmenu,
+                "widgets": {} # To store dynamically created widgets
+            }
+            
+            # Initial creation of dynamic fields based on current type
+            self._create_dynamic_config_fields(self.scrollable_config_frame, name, config, row_num)
             
             row_num += 1
 
-        # Auto Restart Option
-        ctk.CTkLabel(scrollable_config_frame, text="Auto Restart Enabled", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=row_num, column=0, padx=5, pady=10, sticky="w", columnspan=2)
-        self.auto_restart_switch = ctk.CTkSwitch(scrollable_config_frame, text="", onvalue=True, offvalue=False)
-        self.auto_restart_switch.grid(row=row_num, column=2, padx=5, pady=10, sticky="w")
-        if SERVER_CONFIG.get("auto_restart_enabled", False):
-            self.auto_restart_switch.select()
-        else:
-            self.auto_restart_switch.deselect()
-        row_num += 1
+        
 
         button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         button_frame.pack(side="bottom", fill="x", padx=10, pady=10)
 
-        save_button = ctk.CTkButton(button_frame, text=_("Save All Configs"), command=self._save_all_configs, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
+        save_button = ctk.CTkButton(button_frame, text=_("Save All Configs"), command=self._save_all_configs, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         save_button.pack(side="right", padx=10)
 
-        cancel_button = ctk.CTkButton(button_frame, text=_("Cancel"), command=self.destroy, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"))
+        cancel_button = ctk.CTkButton(button_frame, text=_("Cancel"), command=self.destroy, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         cancel_button.pack(side="right", padx=5)
+
+        # --- Auto Restart Option (Moved to bottom) ---
+        auto_restart_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        auto_restart_frame.pack(side="bottom", fill="x", padx=10, pady=5)
+
+        ctk.CTkLabel(auto_restart_frame, text="Auto Restart Enabled", font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).pack(side="left", padx=5, pady=5)
+        self.auto_restart_switch = ctk.CTkSwitch(auto_restart_frame, text="", onvalue=True, offvalue=False)
+        self.auto_restart_switch.pack(side="left", padx=5, pady=5)
+        if SERVER_CONFIG.get("auto_restart_enabled", False):
+            self.auto_restart_switch.select()
+        else:
+            self.auto_restart_switch.deselect()
 
     def _browse_path(self, entry_widget):
         initial_dir = os.path.dirname(entry_widget.get()) if os.path.exists(entry_widget.get()) else os.getcwd()
@@ -674,18 +685,128 @@ class ConfigWindow(ctk.CTkToplevel):
             entry_widget.insert(0, file_path)
             self.master.log(f"Selected new path: {file_path}")
 
+    def _create_dynamic_config_fields(self, parent_frame, server_name, config_data, row_num):
+        # Destroy all widgets in columns 2 and 3 for the current server's potential rows
+        # This is a more aggressive clear to ensure no old widgets remain
+        for r in range(row_num, row_num + 5): # Covers the max possible rows for a process config
+            for c in range(2, 4): # Covers columns 2 and 3
+                for widget in parent_frame.grid_slaves(row=r, column=c):
+                    widget.destroy()
+
+
+        self.server_config_widgets[server_name]["widgets"] = {} # Reset widgets for this server
+
+        if config_data["type"] == "process":
+            # Process Name
+            process_name_label = ctk.CTkLabel(parent_frame, text="Process Name:", font=ctk.CTkFont(family="맑은 고딕", size=12))
+            process_name_label.grid(row=row_num, column=2, padx=(5,0), pady=2, sticky="w")
+            process_name_entry = ctk.CTkEntry(parent_frame, width=150, font=ctk.CTkFont(family="맑은 고딕", size=12))
+            process_name_entry.grid(row=row_num, column=2, padx=(100,5), pady=2, sticky="w")
+            process_name_entry.insert(0, config_data.get("process_name", ""))
+            self.server_config_widgets[server_name]["widgets"]["process_name_entry"] = process_name_entry
+
+            # Start Command
+            start_cmd_label = ctk.CTkLabel(parent_frame, text="Start Cmd:", font=ctk.CTkFont(family="맑은 고딕", size=12))
+            start_cmd_label.grid(row=row_num + 1, column=2, padx=(5,0), pady=2, sticky="w")
+            start_cmd_entry = ctk.CTkEntry(parent_frame, width=350, font=ctk.CTkFont(family="맑은 고딕", size=12))
+            start_cmd_entry.grid(row=row_num + 1, column=2, padx=(70,5), pady=2, sticky="ew")
+            start_cmd_entry.insert(0, config_data["start_cmd"][0] if config_data.get("start_cmd") and isinstance(config_data["start_cmd"], list) else "")
+            self.server_config_widgets[server_name]["widgets"]["start_cmd_entry"] = start_cmd_entry
+
+            browse_button = ctk.CTkButton(parent_frame, text="Browse", width=70, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
+                                          command=lambda entry=start_cmd_entry: self._browse_path(entry), corner_radius=0)
+            browse_button.grid(row=row_num + 1, column=3, padx=5, pady=2)
+            self.server_config_widgets[server_name]["widgets"]["browse_button"] = browse_button
+
+            # Stop Command
+            stop_cmd_label = ctk.CTkLabel(parent_frame, text="Stop Cmd:", font=ctk.CTkFont(family="맑은 고딕", size=12))
+            stop_cmd_label.grid(row=row_num + 2, column=2, padx=(5,0), pady=2, sticky="w")
+            stop_cmd_entry = ctk.CTkEntry(parent_frame, width=350, font=ctk.CTkFont(family="맑은 고딕", size=12))
+            stop_cmd_entry.grid(row=row_num + 2, column=2, padx=(70,5), pady=2, sticky="ew")
+            stop_cmd_entry.insert(0, config_data["stop_cmd"][0] if config_data.get("stop_cmd") and isinstance(config_data["stop_cmd"], list) else "")
+            self.server_config_widgets[server_name]["widgets"]["stop_cmd_entry"] = stop_cmd_entry
+
+            # CWD
+            cwd_label = ctk.CTkLabel(parent_frame, text="CWD:", font=ctk.CTkFont(family="맑은 고딕", size=12))
+            cwd_label.grid(row=row_num + 3, column=2, padx=(5,0), pady=2, sticky="w")
+            cwd_entry = ctk.CTkEntry(parent_frame, width=350, font=ctk.CTkFont(family="맑은 고딕", size=12))
+            cwd_entry.grid(row=row_num + 3, column=2, padx=(70,5), pady=2, sticky="ew")
+            cwd_entry.insert(0, config_data.get("cwd", ""))
+            self.server_config_widgets[server_name]["widgets"]["cwd_entry"] = cwd_entry
+
+            # Show Console
+            show_console_checkbox = ctk.CTkCheckBox(parent_frame, text="Show Console", font=ctk.CTkFont(family="맑은 고딕", size=12))
+            show_console_checkbox.grid(row=row_num + 4, column=2, padx=5, pady=2, sticky="w")
+            if config_data.get("show_console", False):
+                show_console_checkbox.select()
+            else:
+                show_console_checkbox.deselect()
+            self.server_config_widgets[server_name]["widgets"]["show_console_checkbox"] = show_console_checkbox
+
+        elif config_data["type"] == "service":
+            service_name_label = ctk.CTkLabel(parent_frame, text="Service Name:", font=ctk.CTkFont(family="맑은 고딕", size=12))
+            service_name_label.grid(row=row_num, column=2, padx=(5,0), pady=2, sticky="w")
+            service_name_entry = ctk.CTkEntry(parent_frame, width=200, font=ctk.CTkFont(family="맑은 고딕", size=12))
+            service_name_entry.grid(row=row_num, column=2, padx=(100,5), pady=2, sticky="w")
+            service_name_entry.insert(0, config_data.get("service_name", ""))
+            self.server_config_widgets[server_name]["widgets"]["service_name_entry"] = service_name_entry
+
+    def _on_type_change(self, new_type, server_name, row_num):
+        # Get the current config for the server
+        current_config = SERVER_CONFIG[server_name].copy()
+        current_config["type"] = new_type # Update type for dynamic field creation
+
+        # Re-create dynamic fields
+        self._create_dynamic_config_fields(self.scrollable_config_frame, server_name, current_config, row_num)
+
     def _save_all_configs(self):
         global SERVER_CONFIG
         updated_configs = SERVER_CONFIG.copy()
         errors = []
 
-        for name, entry_widget in self.path_entries.items():
-            if updated_configs[name]["type"] == "process":
-                new_path = entry_widget.get()
-                if not os.path.exists(new_path):
-                    errors.append(f"Path for {name} does not exist:\n{new_path}")
-                else:
-                    updated_configs[name]["start_cmd"] = [new_path]
+        for name, server_widgets in self.server_config_widgets.items():
+            selected_type = server_widgets["type_optionmenu"].get()
+            updated_configs[name]["type"] = selected_type
+            
+            if selected_type == "process":
+                widgets = server_widgets["widgets"]
+                process_name = widgets["process_name_entry"].get()
+                start_cmd = widgets["start_cmd_entry"].get()
+                stop_cmd = widgets["stop_cmd_entry"].get()
+                cwd = widgets["cwd_entry"].get()
+                show_console = widgets["show_console_checkbox"].get()
+
+                if not process_name:
+                    errors.append(f"Process Name for {name} cannot be empty.")
+                if not start_cmd:
+                    errors.append(f"Start Command for {name} cannot be empty.")
+                elif not os.path.exists(start_cmd):
+                    errors.append(f"Start Command path for {name} does not exist:\n{start_cmd}")
+
+                updated_configs[name]["process_name"] = process_name
+                updated_configs[name]["start_cmd"] = [start_cmd]
+                updated_configs[name]["stop_cmd"] = [stop_cmd] if stop_cmd else [] # Allow empty stop_cmd
+                updated_configs[name]["cwd"] = cwd
+                updated_configs[name]["show_console"] = show_console
+
+                # Remove service-specific keys if changing from service to process
+                updated_configs[name].pop("service_name", None)
+
+            elif selected_type == "service":
+                widgets = server_widgets["widgets"]
+                service_name = widgets["service_name_entry"].get()
+
+                if not service_name:
+                    errors.append(f"Service Name for {name} cannot be empty.")
+                
+                updated_configs[name]["service_name"] = service_name
+
+                # Remove process-specific keys if changing from process to service
+                updated_configs[name].pop("process_name", None)
+                updated_configs[name].pop("start_cmd", None)
+                updated_configs[name].pop("stop_cmd", None)
+                updated_configs[name].pop("cwd", None)
+                updated_configs[name].pop("show_console", None)
         
         # Save auto restart setting
         updated_configs["auto_restart_enabled"] = self.auto_restart_switch.get()
