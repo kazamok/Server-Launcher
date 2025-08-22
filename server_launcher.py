@@ -73,8 +73,16 @@ TRANSLATIONS = {
     "Start Command for {} cannot be empty.": "{}의 시작 명령어는 비워둘 수 없습니다.",
     "Start Command path for {} does not exist:\n{}": "{}의 시작 명령어 경로가 존재하지 않습니다:\n{}",
     "Service Name for {} cannot be empty.": "{}의 서비스 이름은 비워둘 수 없습니다.",
+    # MySQL specific
+    "Find Service": "서비스 찾기",
+    "MySQL Service Detection": "MySQL 서비스 감지",
+    "Could not find a running MySQL service.": "실행 중인 MySQL 서비스를 찾을 수 없습니다.",
+    "Found service: {}. Use this?": "서비스를 찾았습니다: {}. 사용하시겠습니까?",
+    "If you run MySQL from a folder (e.g., XAMPP), choose 'process'.": "만약 폴더(예: XAMPP)에서 MySQL을 실행한다면 'process'를 선택하세요.",
+    "If MySQL is installed and runs on boot, choose 'service'.": "MySQL이 설치되어 부팅 시 자동 실행된다면 'service'를 선택하세요.",
+    "Edit Config File": "설정 파일 열기",
+    "Config file not found:": "설정 파일을 찾을 수 없습니다:",
 }
-
 
 def _(text):
     return TRANSLATIONS.get(text, text)
@@ -98,6 +106,7 @@ def load_config():
         "MySQL": {
             "type": "service",
             "service_name": "MySQL84",
+            "config_path": "C:/WISE/Xampp/mysql/bin/my.ini"
         },
         # "MySQL_Process_Example": { # Uncomment and modify to use MySQL as a process
         #     "type": "process",
@@ -135,6 +144,7 @@ def load_config():
             "start_cmd": [r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo\\authserver.exe"],
             "cwd": r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo",
             "show_console": True,
+            "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/authserver.conf"
         },
         "World Server": {
             "type": "process",
@@ -142,6 +152,7 @@ def load_config():
             "start_cmd": [r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo\\worldserver.exe"],
             "cwd": r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo",
             "show_console": True,
+            "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf"
         },
         "auto_restart_enabled": False, # New config for auto restart
     }
@@ -626,12 +637,14 @@ class ConfigWindow(ctk.CTkToplevel):
         self.master = master
         self.title(_("Server Configuration"))
         self.geometry("950x600")
+        self.minsize(950, 600)
         self.grab_set()
 
         self.selected_server_name = None
         self.server_config_widgets = {}
         self.highlight_color = "#107C41"  # Green for selection and hover
-        
+        self.modified_servers = set()
+
         # Create a temporary copy of the config to stage changes
         self.temp_config = copy.deepcopy(SERVER_CONFIG)
 
@@ -704,16 +717,33 @@ class ConfigWindow(ctk.CTkToplevel):
             self.auto_restart_switch.select()
         else:
             self.auto_restart_switch.deselect()
+        self.auto_restart_switch.configure(command=lambda: self._mark_as_modified("auto_restart_enabled"))
+
+    def _mark_as_modified(self, server_name, *args):
+        """Marks a server as modified and updates its button text."""
+        if server_name not in self.modified_servers:
+            self.modified_servers.add(server_name)
+            self._update_server_list_indicators()
+
+    def _update_server_list_indicators(self):
+        """Updates the server list buttons to show a '*' for modified servers."""
+        for name, widgets in self.server_config_widgets.items():
+            button = widgets["select_button"]
+            if name in self.modified_servers:
+                button.configure(text=f"{name} *")
+            else:
+                button.configure(text=name)
 
     def _update_temp_config_from_ui(self, server_name):
         """Reads values from the UI widgets and saves them to the temp_config dictionary."""
-        if server_name is None or not self.server_config_widgets[server_name]["widgets"]:
+        if server_name is None or server_name not in self.server_config_widgets or not self.server_config_widgets[server_name].get("widgets"):
             return
 
-        server_type = self.temp_config[server_name]["type"]
         widgets = self.server_config_widgets[server_name]["widgets"]
 
-        if server_type == "process" and "process_name_entry" in widgets:
+        # This function is called before the UI is redrawn for a different server type.
+        # We should read the UI based on what widgets are actually present, not based on the (potentially new) server_type.
+        if "process_name_entry" in widgets: # This widget only exists for 'process' type
             self.temp_config[server_name].update({
                 "process_name": widgets["process_name_entry"].get(),
                 "start_cmd": [widgets["start_cmd_entry"].get()],
@@ -721,8 +751,11 @@ class ConfigWindow(ctk.CTkToplevel):
                 "cwd": widgets["cwd_entry"].get(),
                 "show_console": widgets["show_console_checkbox"].get()
             })
-        elif server_type == "service" and "service_name_entry" in widgets:
+        elif "service_name_entry" in widgets: # This widget only exists for 'service' type
             self.temp_config[server_name]["service_name"] = widgets["service_name_entry"].get()
+
+        if "config_path_entry" in widgets:
+            self.temp_config[server_name]["config_path"] = widgets["config_path_entry"].get()
 
     def _select_server(self, server_name):
         """Handles selecting a server, saving the previous state, and showing the new state."""
@@ -738,12 +771,27 @@ class ConfigWindow(ctk.CTkToplevel):
         # Reverse translate the type
         new_type = "process" if new_type_translated == _("process") else "service"
 
+        # First, save the current UI state before changing the type and redrawing
         if self.selected_server_name == server_name:
             self._update_temp_config_from_ui(server_name)
-        
+
+        self._mark_as_modified(server_name)
+
+        # Now, update the type in our temporary config
         self.temp_config[server_name]['type'] = new_type
         
+        # If the currently selected server is the one we're changing, redraw its details view
         if self.selected_server_name == server_name:
+            # Special handling for MySQL when switching to 'process'
+            if server_name == "MySQL" and new_type == "process":
+                self.temp_config[server_name].update({
+                    "process_name": "mysqld.exe",
+                    "start_cmd": [os.path.join(os.getcwd(), "Xampp", "mysql_start.bat").replace("\\", "/")],
+                    "stop_cmd": [os.path.join(os.getcwd(), "Xampp", "mysql_stop.bat").replace("\\", "/")],
+                    "cwd": os.path.join(os.getcwd(), "Xampp").replace("\\", "/"),
+                    "show_console": False
+                })
+
             self._display_server_details(server_name)
 
     def _update_button_highlights(self):
@@ -755,7 +803,46 @@ class ConfigWindow(ctk.CTkToplevel):
             else:
                 button.configure(fg_color=default_color)
 
-    def _browse_path(self, entry_widget):
+    def _find_and_set_mysql_service(self, entry_widget):
+        self.master.log("Scanning for MySQL services...")
+        found_service = None
+        try:
+            for service in psutil.win_service_iter():
+                if "mysql" in service.name().lower():
+                    found_service = service
+                    break # Found a likely candidate
+            
+            if found_service:
+                msg = CTkMessagebox(title=_("MySQL Service Detection"), 
+                                    message=_("Found service: {}. Use this?").format(found_service.name()),
+                                    icon="question", option_1=_("Cancel"), option_2=_("OK"))
+                if msg.get() == "OK":
+                    entry_widget.delete(0, ctk.END)
+                    entry_widget.insert(0, found_service.name())
+                    self.master.log(f"Set MySQL service to '{found_service.name()}'")
+                    self._mark_as_modified("MySQL")
+            else:
+                CTkMessagebox(title=_("MySQL Service Detection"), message=_("Could not find a running MySQL service."), icon="warning")
+                self.master.log("Could not find a running MySQL service.", level="warning")
+
+        except Exception as e:
+            self.master.log(f"Error scanning for services: {e}", level="error")
+            CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
+
+    def _open_config_file(self, server_name):
+        config_path = self.temp_config.get(server_name, {}).get("config_path")
+        if config_path and os.path.exists(config_path):
+            try:
+                os.startfile(config_path)
+                self.master.log(f"Opening config file for {server_name}: {config_path}")
+            except Exception as e:
+                self.master.log(f"Failed to open config file {config_path}: {e}", level="error")
+                CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
+        else:
+            self.master.log(f"Config file not found for {server_name} at path: {config_path}", level="warning")
+            CTkMessagebox(title=_("Error"), message=f"{_('Config file not found:')}\n{config_path}", icon="cancel")
+
+    def _browse_path(self, entry_widget, server_name):
         initial_dir = os.path.dirname(entry_widget.get()) if os.path.exists(entry_widget.get()) else os.getcwd()
         file_path = filedialog.askopenfilename(
             initialdir=initial_dir, title=_("Select Executable"),
@@ -764,6 +851,7 @@ class ConfigWindow(ctk.CTkToplevel):
             entry_widget.delete(0, ctk.END)
             entry_widget.insert(0, file_path)
             self.master.log(f"{_('Selected new path')}: {file_path}")
+            self._mark_as_modified(server_name)
 
     def _display_server_details(self, server_name):
         """Populates the details panel with widgets for the given server, based on temp_config."""
@@ -775,6 +863,35 @@ class ConfigWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(self.details_frame, text=_("Settings for: {}").format(server_name), font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).pack(pady=(10, 20), padx=10, anchor="w")
 
+        # Special instructions for MySQL
+        if server_name == "MySQL":
+            guide_frame = ctk.CTkFrame(self.details_frame, fg_color=("gray85", "gray20"))
+            guide_frame.pack(fill="x", padx=10, pady=(0, 15))
+            ctk.CTkLabel(guide_frame, text=_("If MySQL is installed and runs on boot, choose 'service'."), 
+                         font=ctk.CTkFont(family="맑은 고딕", size=12)).pack(anchor="w", padx=10, pady=(5, 2))
+            ctk.CTkLabel(guide_frame, text=_("If you run MySQL from a folder (e.g., XAMPP), choose 'process'."), 
+                         font=ctk.CTkFont(family="맑은 고딕", size=12)).pack(anchor="w", padx=10, pady=(2, 5))
+
+        # --- Config Path Entry and Button ---
+        if "config_path" in config_data:
+            row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
+            row_frame.pack(fill="x", padx=10, pady=5)
+            ctk.CTkLabel(row_frame, text=_("Config Path:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=100, anchor="w").pack(side="left")
+            config_path_entry = ctk.CTkEntry(row_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
+            config_path_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            config_path_entry.insert(0, config_data.get("config_path", ""))
+            config_path_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
+            self.server_config_widgets[server_name]["widgets"]["config_path_entry"] = config_path_entry
+            
+            edit_button = ctk.CTkButton(row_frame, text=_("Edit Config File"), width=120, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
+                                          command=lambda n=server_name: self._open_config_file(n), corner_radius=0)
+            edit_button.pack(side="left")
+
+        # Separator
+        if config_data["type"] == "process" or config_data["type"] == "service":
+             separator = ctk.CTkFrame(self.details_frame, height=1, fg_color="gray50")
+             separator.pack(fill="x", padx=10, pady=10)
+
         if config_data["type"] == "process":
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
             row_frame.pack(fill="x", padx=10, pady=2)
@@ -782,6 +899,7 @@ class ConfigWindow(ctk.CTkToplevel):
             process_name_entry = ctk.CTkEntry(row_frame, width=200, font=ctk.CTkFont(family="맑은 고딕", size=12))
             process_name_entry.pack(side="left", fill="x", expand=True)
             process_name_entry.insert(0, config_data.get("process_name", ""))
+            process_name_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
             self.server_config_widgets[server_name]["widgets"]["process_name_entry"] = process_name_entry
 
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
@@ -789,10 +907,13 @@ class ConfigWindow(ctk.CTkToplevel):
             ctk.CTkLabel(row_frame, text=_("Start Cmd:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=100, anchor="w").pack(side="left")
             start_cmd_entry = ctk.CTkEntry(row_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
             start_cmd_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-            start_cmd_entry.insert(0, config_data.get("start_cmd", [""])[0])
+            start_cmd_list = config_data.get("start_cmd", [])
+            if start_cmd_list:
+                start_cmd_entry.insert(0, start_cmd_list[0])
+            start_cmd_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
             self.server_config_widgets[server_name]["widgets"]["start_cmd_entry"] = start_cmd_entry
             browse_button = ctk.CTkButton(row_frame, text=_("Browse"), width=70, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
-                                          command=lambda entry=start_cmd_entry: self._browse_path(entry), corner_radius=0)
+                                          command=lambda entry=start_cmd_entry, n=server_name: self._browse_path(entry, n), corner_radius=0)
             browse_button.pack(side="left")
 
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
@@ -800,7 +921,10 @@ class ConfigWindow(ctk.CTkToplevel):
             ctk.CTkLabel(row_frame, text=_("Stop Cmd:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=100, anchor="w").pack(side="left")
             stop_cmd_entry = ctk.CTkEntry(row_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
             stop_cmd_entry.pack(side="left", fill="x", expand=True)
-            stop_cmd_entry.insert(0, config_data.get("stop_cmd", [""])[0])
+            stop_cmd_list = config_data.get("stop_cmd", [])
+            if stop_cmd_list:
+                stop_cmd_entry.insert(0, stop_cmd_list[0])
+            stop_cmd_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
             self.server_config_widgets[server_name]["widgets"]["stop_cmd_entry"] = stop_cmd_entry
 
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
@@ -809,6 +933,7 @@ class ConfigWindow(ctk.CTkToplevel):
             cwd_entry = ctk.CTkEntry(row_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
             cwd_entry.pack(side="left", fill="x", expand=True)
             cwd_entry.insert(0, config_data.get("cwd", ""))
+            cwd_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
             self.server_config_widgets[server_name]["widgets"]["cwd_entry"] = cwd_entry
 
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
@@ -817,6 +942,7 @@ class ConfigWindow(ctk.CTkToplevel):
             show_console_checkbox.pack(side="left")
             if config_data.get("show_console", False):
                 show_console_checkbox.select()
+            show_console_checkbox.configure(command=lambda n=server_name: self._mark_as_modified(n))
             self.server_config_widgets[server_name]["widgets"]["show_console_checkbox"] = show_console_checkbox
 
         elif config_data["type"] == "service":
@@ -824,9 +950,20 @@ class ConfigWindow(ctk.CTkToplevel):
             row_frame.pack(fill="x", padx=10, pady=2)
             ctk.CTkLabel(row_frame, text=_("Service Name:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=100, anchor="w").pack(side="left")
             service_name_entry = ctk.CTkEntry(row_frame, width=200, font=ctk.CTkFont(family="맑은 고딕", size=12))
-            service_name_entry.pack(side="left", fill="x", expand=True)
+            service_name_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
             service_name_entry.insert(0, config_data.get("service_name", ""))
+            service_name_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
             self.server_config_widgets[server_name]["widgets"]["service_name_entry"] = service_name_entry
+
+            # Add a button to find the service automatically, only for MySQL
+            if server_name == "MySQL":
+                find_button = ctk.CTkButton(row_frame, text=_("Find Service"), width=90, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
+                                              command=lambda entry=service_name_entry: self._find_and_set_mysql_service(entry), corner_radius=0)
+                find_button.pack(side="left")
+
+                # Automatically scan for service if the field is empty
+                if not config_data.get("service_name"):
+                    self.after(100, lambda entry=service_name_entry: self._find_and_set_mysql_service(entry))
 
     def _save_all_configs(self):
         global SERVER_CONFIG
@@ -858,6 +995,9 @@ class ConfigWindow(ctk.CTkToplevel):
             save_config(SERVER_CONFIG)
             self.master.log(_("All server configurations saved successfully."))
             CTkMessagebox(title=_("Configuration Saved"), message=_("All server configurations saved successfully."), icon="check")
+
+            self.modified_servers.clear()
+            self._update_server_list_indicators()
             
             for name, config in SERVER_CONFIG.items():
                 if name == "auto_restart_enabled": continue
