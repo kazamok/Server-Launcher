@@ -4,14 +4,15 @@ echo Building Server Launcher...
 REM Change to the script's directory
 pushd "%~dp0"
 
-echo Installing dependencies from requirements.txt...
-pip install -r requirements.txt
+echo Installing dependencies...
+pip install customtkinter psutil CTkMessagebox pyinstaller
 if %errorlevel% neq 0 (
     echo Failed to install dependencies. Aborting.
     popd
     pause
     exit /b %errorlevel%
 )
+
 
 
 echo.
