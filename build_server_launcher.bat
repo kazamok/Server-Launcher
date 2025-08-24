@@ -19,12 +19,12 @@ echo.
 echo Cleaning up previous build artifacts...
 if exist "dist" rmdir /s /q "dist"
 if exist "build" rmdir /s /q "build"
-if exist "server_launcher.spec" del "server_launcher.spec"
+REM if exist "server_launcher.spec" del "server_launcher.spec"
 
 
 echo.
 echo Running PyInstaller to build the executable...
-pyinstaller server_launcher.py --onefile --windowed
+pyinstaller server_launcher.py --onefile --windowed > build.log 2>&1
 
 REM Check if build was successful
 if exist "dist\server_launcher.exe" (
