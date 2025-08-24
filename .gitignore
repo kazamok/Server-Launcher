@@ -1,6 +1,4 @@
 build.log
-build_server_launcher.bat
-run_server_launcher.bat
 server_config.json
 server_launcher.log
 /backup
