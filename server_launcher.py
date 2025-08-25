@@ -1017,7 +1017,7 @@ class ConfigWindow(ctk.CTkToplevel):
             for service in psutil.win_service_iter():
                 if "mysql" in service.name().lower():
                     found_service = service
-                    break # 윈도우서비스 중 유력한 프로세스 후보를 찾았고, 선택
+                    break # 유력한 후보를 찾았습니다.
             
             if found_service:
                 msg = CTkMessagebox(title=_("MySQL Service Detection"), 
