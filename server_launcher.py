@@ -124,9 +124,19 @@ TRANSLATIONS = {
 def _(text):
     return TRANSLATIONS.get(text, text)
 
+# --- 애플리케이션 경로 확인 ---
+def get_base_path():
+    """ Get the base path, whether running from source or as a bundled exe. """
+    if getattr(sys, 'frozen', False):
+        # We are running in a bundle (e.g., PyInstaller)
+        return os.path.dirname(sys.executable)
+    else:
+        # We are running in a normal Python environment
+        return os.path.dirname(os.path.abspath(__file__))
+
 # --- 로깅 설정 ---
-# 로그 파일을 현재 스크립트 위치에 'server_launcher.log'로 생성합니다.
-log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server_launcher.log')
+# 로그 파일을 애플리케이션 위치에 'server_launcher.log'로 생성합니다.
+log_file = os.path.join(get_base_path(), 'server_launcher.log')
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] - %(message)s',
@@ -137,7 +147,7 @@ logging.basicConfig(
 )
 
 # --- 설정 파일 관리 ---
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server_config.json')
+CONFIG_FILE = os.path.join(get_base_path(), 'server_config.json')
 
 def load_config():
     default_config = {
@@ -1226,7 +1236,8 @@ class ConfigWindow(ctk.CTkToplevel):
             CTkMessagebox(title=_("Configuration Error"), message=error_message, icon="cancel")
             self.master.log(f"Configuration save failed due to errors: {errors}", level="error")
         else:
-            SERVER_CONFIG = self.temp_config
+            SERVER_CONFIG.clear()
+            SERVER_CONFIG.update(self.temp_config)
             save_config(SERVER_CONFIG)
             self.master.log(_("All server configurations saved successfully."))
             CTkMessagebox(title=_("Configuration Saved"), message=_("All server configurations saved successfully."), icon="check")

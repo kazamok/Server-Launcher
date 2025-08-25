@@ -2,7 +2,8 @@
     "MySQL": {
         "type": "service",
         "service_name": "MySQL84",
-        "config_path": "C:/WISE/Xampp/mysql/bin/my.ini"
+        "config_path": "C:/WISE/Xampp/mysql/bin/my.ini",
+        "auto_restart": 0
     },
     "Apache": {
         "type": "process",
@@ -14,7 +15,8 @@
             "C:\\\\WISE\\\\xampp\\\\apache_stop.bat"
         ],
         "cwd": "C:\\\\WISE\\\\xampp",
-        "show_console": false
+        "show_console": 0,
+        "auto_restart": 0
     },
     "Backend": {
         "type": "process",
@@ -22,8 +24,12 @@
         "start_cmd": [
             "C:\\\\WISE\\\\Account-manager\\\\start_backend.bat"
         ],
+        "stop_cmd": [
+            "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :5000') do taskkill /PID %a /F"
+        ],
         "cwd": "C:\\\\WISE\\\\Account-manager",
-        "show_console": false
+        "show_console": 0,
+        "auto_restart": 0
     },
     "Frontend": {
         "type": "process",
@@ -31,8 +37,12 @@
         "start_cmd": [
             "C:\\\\WISE\\\\Account-manager\\\\start_frontend.bat"
         ],
+        "stop_cmd": [
+            "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :3000') do taskkill /PID %a /F"
+        ],
         "cwd": "C:\\\\WISE\\\\Account-manager",
-        "show_console": false
+        "show_console": 0,
+        "auto_restart": 0
     },
     "Auth Server": {
         "type": "process",
@@ -41,8 +51,10 @@
             "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo\\\\authserver.exe"
         ],
         "cwd": "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo",
-        "show_console": true,
-        "config_path": "C:/WISE/BUILD/bin/RelWithDebInfo/configs/authserver.conf"
+        "show_console": 1,
+        "config_path": "C:/WISE/BUILD/bin/RelWithDebInfo/configs/authserver.conf",
+        "stop_cmd": [],
+        "auto_restart": 0
     },
     "World Server": {
         "type": "process",
@@ -51,8 +63,11 @@
             "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo\\\\worldserver.exe"
         ],
         "cwd": "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo",
-        "show_console": true,
-        "config_path": "C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf"
+        "show_console": 1,
+        "config_path": "C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf",
+        "stop_cmd": [],
+        "auto_restart": 0
     },
-    "auto_restart_enabled": false
+    "auto_restart_enabled": false,
+    "editor_path": "notepad.exe"
 }
