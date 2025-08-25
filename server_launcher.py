@@ -957,19 +957,15 @@ class ConfigWindow(ctk.CTkToplevel):
         # 이 함수는 다른 서버 유형에 대해 UI를 다시 그리기 전에 호출됩니다.
         # 잠재적으로 새로운 server_type이 아닌 실제로 존재하는 위젯을 기반으로 UI를 읽어야 합니다.
         if "process_name_entry" in widgets: # 이 위젯은 'process' 유형에만 존재합니다.
-            self.temp_config[server_name].update({
-                "process_name": widgets["process_name_entry"].get(),
-                "start_cmd": [widgets["start_cmd_entry"].get()],
-                "stop_cmd": [widgets["stop_cmd_entry"].get()] if widgets["stop_cmd_entry"].get() else [],
-                "cwd": widgets["cwd_entry"].get(),
-                "show_console": widgets["show_console_checkbox"].get(),
-                "auto_restart": widgets["auto_restart_checkbox"].get()
-            })
+            self.temp_config[server_name]["process_name"] = widgets["process_name_entry"].get()
+            self.temp_config[server_name]["start_cmd"] = [widgets["start_cmd_entry"].get()]
+            self.temp_config[server_name]["stop_cmd"] = [widgets["stop_cmd_entry"].get()] if widgets["stop_cmd_entry"].get() else []
+            self.temp_config[server_name]["cwd"] = widgets["cwd_entry"].get()
+            self.temp_config[server_name]["show_console"] = True if widgets["show_console_checkbox"].get() == 1 else False
+            self.temp_config[server_name]["auto_restart"] = True if widgets["auto_restart_checkbox"].get() == 1 else False
         elif "service_name_entry" in widgets: # 이 위젯은 'service' 유형에만 존재합니다.
-            self.temp_config[server_name].update({
-                "service_name": widgets["service_name_entry"].get(),
-                "auto_restart": widgets["auto_restart_checkbox"].get()
-            })
+            self.temp_config[server_name]["service_name"] = widgets["service_name_entry"].get()
+            self.temp_config[server_name]["auto_restart"] = True if widgets["auto_restart_checkbox"].get() == 1 else False
 
         if "config_path_entry" in widgets:
             self.temp_config[server_name]["config_path"] = widgets["config_path_entry"].get()

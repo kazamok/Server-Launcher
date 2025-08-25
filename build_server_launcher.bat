@@ -35,6 +35,9 @@ REM Check if build was successful
 if exist "dist\server_launcher.exe" (
     echo.
     echo Build successful! Executable is in dist\server_launcher.exe
+    echo.
+    echo Copying config file to dist folder...
+    copy "server_config.json" "dist\server_config.json"
 ) else (
     echo.
     echo Build failed! Check the output above for errors.
