@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import importlib.util
+import webbrowser
 
 # --- 의존성 검사 및 설치 ---
 def check_and_install_dependencies():
@@ -71,6 +72,7 @@ TRANSLATIONS = {
     "Type": "유형",
     "Executable/Service Path": "실행 파일/서비스 경로",
     "Browse": "찾아보기",
+    "Editor Button": "편집기",
     "N/A (Service)": "해당 없음 (서비스)",
     "Auto Restart Enabled": "자동 재시작 활성화",
     "Save All Configs": "모든 설정 저장",
@@ -118,6 +120,10 @@ TRANSLATIONS = {
     "Editor path is not configured.": "에디터 경로가 설정되지 않았습니다.",
     "Yes": "예",
     "No": "아니오",
+    "Notepad++ Not Found": "Notepad++ 찾을 수 없음",
+    "Notepad++ could not be found. Would you like to open the download page?": "Notepad++를 찾을 수 없습니다. 다운로드 페이지를 여시겠습니까?",
+    "Open Download Page": "다운로드 페이지 열기",
+    "Notepad++ could not be found. What would you like to do?": "Notepad++를 찾을 수 없습니다. 무엇을 하시겠습니까?",
 }
 
 # --- 번역 함수 ---
@@ -205,7 +211,7 @@ def load_config():
             "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf"
         },
         "auto_restart_enabled": False, # 자동 재시작을 위한 새로운 설정
-        "editor_path": "notepad.exe", # 기본 에디터
+        "editor_path": "notepad++.exe", # 기본 에디터
     }
 
     try:
@@ -679,7 +685,7 @@ class ServerLauncher(ctk.CTk):
                     # 더 정확한 일치를 위해 구성된 process_name 사용
                     target_process_name = config['process_name'].lower()
 
-                    for proc in psutil.process_iter(['name', 'cmdline']):
+                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                         try:
                             if proc.info['name'].lower() == target_process_name:
                                 # 이전 확인은 배치 파일로 시작된 프로세스에 대해 너무 엄격해서,
@@ -711,7 +717,7 @@ class ServerLauncher(ctk.CTk):
                 elif status == "Stopped":
                     widget.configure(text=_("Stopped"), text_color="#EF5350")
                 else: # 오류 등에 대한 수정된 상태 표시
-                    widget.configure(text=_(status), text_color="gray") 
+                    widget.configure(text=_("Error"), text_color="gray") 
 
                 # 버튼 상태 업데이트
                 start_button = self.server_widgets[name]["start"]
@@ -756,11 +762,11 @@ class ServerLauncher(ctk.CTk):
 
     def on_quit_button_click(self):
         msg = CustomMessageBox(
+            master=self, # Pass self as master
             title=_("Quit Launcher?"),
             message=_("Are you sure you want to quit?\nRunning servers will not be affected."),
             font=ctk.CTkFont(family="맑은 고딕", size=12),
-            option_1=_("No"),
-            option_2=_("Yes")
+            options=[_("No"), _("Yes")]
         )
         response = msg.get()
         if response == _("Yes"):
@@ -770,8 +776,9 @@ class ServerLauncher(ctk.CTk):
             self.log("User cancelled quit.")
 
 class CustomMessageBox(ctk.CTkToplevel):
-    def __init__(self, title, message, font, option_1, option_2):
-        super().__init__()
+    def __init__(self, master, title, message, font, options: list[str]): # Added master, changed options
+        super().__init__(master) # Pass master to super
+        self.master = master # Store master
 
         self.title(title)
         self.lift()
@@ -786,7 +793,7 @@ class CustomMessageBox(ctk.CTkToplevel):
         parent_y = parent.winfo_y()
         parent_width = parent.winfo_width()
         parent_height = parent.winfo_height()
-        self_width = 350
+        self_width = 400
         self_height = 150
         pos_x = parent_x + (parent_width // 2) - (self_width // 2)
         pos_y = parent_y + (parent_height // 2) - (self_height // 2)
@@ -803,13 +810,9 @@ class CustomMessageBox(ctk.CTkToplevel):
         button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         button_frame.pack(pady=10)
 
-        # 버튼 1 (예: "아니요")
-        btn1 = ctk.CTkButton(button_frame, text=option_1, font=font, width=100, command=lambda: self._button_click(option_1))
-        btn1.pack(side="left", padx=10)
-
-        # 버튼 2 (예: "예")
-        btn2 = ctk.CTkButton(button_frame, text=option_2, font=font, width=100, command=lambda: self._button_click(option_2))
-        btn2.pack(side="right", padx=10)
+        for i, option_text in enumerate(options):
+            btn = ctk.CTkButton(button_frame, text=option_text, font=font, width=100, command=lambda opt=option_text: self._button_click(opt))
+            btn.pack(side="left", padx=10) # Pack all buttons to the left
 
     def _button_click(self, response):
         self.response = response
@@ -848,11 +851,17 @@ class ConfigWindow(ctk.CTkToplevel):
         container.grid_columnconfigure(0, weight=1)
         container.grid_columnconfigure(1, weight=3)
         container.grid_rowconfigure(0, weight=1)
+        container.grid_rowconfigure(1, weight=0) # Added for bottom frame
 
-        # --- 왼쪽: 서버 목록 ---
-        server_list_container = ctk.CTkFrame(container, fg_color="transparent")
-        server_list_container.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        
+        # --- 왼쪽: 서버 목록 & 에디터 설정 --- (Modified)
+        left_panel = ctk.CTkFrame(container, fg_color="transparent")
+        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_panel.grid_rowconfigure(0, weight=3) # Server list expands more
+        left_panel.grid_rowconfigure(1, weight=1) # Editor frame expands less
+
+        server_list_container = ctk.CTkFrame(left_panel, fg_color="transparent")
+        server_list_container.grid(row=0, column=0, sticky="nsew", columnspan=2) # Span 2 columns if editor is below
+
         ctk.CTkLabel(server_list_container, text=_("Server Name"), font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         ctk.CTkLabel(server_list_container, text=_("Type"), font=ctk.CTkFont(family="맑은 고딕", size=14, weight="bold")).grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
@@ -883,37 +892,33 @@ class ConfigWindow(ctk.CTkToplevel):
             }
             row_num += 1
 
+        # --- 에디터 설정을 위한 프레임 (MOVED HERE) ---
+        editor_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
+        editor_frame.grid(row=1, column=0, sticky="ew", padx=(5,10), pady=(10,0))
+        editor_frame.grid_columnconfigure(0, weight=1) # Single column that expands
+
+        browse_editor_button = ctk.CTkButton(editor_frame, text=_("Editor Button"), width=70, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
+                                             command=self._handle_editor_button_click, corner_radius=0)
+        browse_editor_button.grid(row=0, column=0, padx=(0,0), pady=5, sticky="w") # Button in row 0, column 0
+
+        self.editor_path_entry = ctk.CTkEntry(editor_frame, font=ctk.CTkFont(family="맑은 고딕", size=12), width=300)
+        self.editor_path_entry.insert(0, self.temp_config.get("editor_path", "")) # Initialize with current editor path
+        self.editor_path_entry.grid(row=1, column=0, sticky="ew", pady=5) # Entry in row 1, column 0, expands horizontally
+
+
         # --- 오른쪽: 세부 정보 패널 ---
         self.details_frame = ctk.CTkFrame(container)
         self.details_frame.grid(row=0, column=1, sticky="nsew")
         self.details_frame.grid_propagate(False)
         ctk.CTkLabel(self.details_frame, text=_("Select a server to configure its settings."), font=ctk.CTkFont(family="맑은 고딕", size=14)).pack(pady=20, padx=10)
 
-        # --- 하단 버튼 및 옵션 ---
+        # --- 하단 버튼 (Save/Cancel) --- (Modified)
         bottom_frame = ctk.CTkFrame(container, fg_color="transparent")
-        bottom_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
-        bottom_frame.grid_columnconfigure(0, weight=1) # 왼쪽을 확장 가능하게 만들기
+        bottom_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0)) # This frame will now just be for the save/cancel buttons, pushed to the right
+        bottom_frame.grid_columnconfigure(0, weight=1) # Push buttons to the right
 
-        # 왼쪽의 에디터 설정을 위한 프레임
-        editor_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
-        editor_frame.grid(row=0, column=0, sticky="ew", padx=(5,10))
-        editor_frame.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(editor_frame, text=_("Editor"), font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold")).grid(row=0, column=0, padx=(0,5), pady=5)
-        self.editor_path_entry = ctk.CTkEntry(editor_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
-        self.editor_path_entry.grid(row=0, column=1, sticky="ew", pady=5)
-        self.editor_path_entry.insert(0, self.temp_config.get("editor_path", "notepad.exe"))
-        
-        browse_editor_button = ctk.CTkButton(editor_frame, text=_("Browse"), width=70, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
-                                             command=self._browse_editor_path, corner_radius=0)
-        browse_editor_button.grid(row=0, column=2, padx=5, pady=5)
-
-        # 오른쪽의 다른 컨트롤을 위한 프레임
-        controls_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
-        controls_frame.grid(row=0, column=1, sticky="e")
-
-        button_frame = ctk.CTkFrame(controls_frame, fg_color="transparent")
-        button_frame.pack(side="left")
+        button_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
+        button_frame.pack(side="right") # Pack to the right
 
         save_button = ctk.CTkButton(button_frame, text=_("Save All Configs"), command=self._save_all_configs, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         save_button.pack(side="right", padx=10)
@@ -921,16 +926,55 @@ class ConfigWindow(ctk.CTkToplevel):
         cancel_button = ctk.CTkButton(button_frame, text=_("Cancel"), command=self.destroy, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         cancel_button.pack(side="right", padx=5)
 
-    def _browse_editor_path(self):
+    def _find_notepadpp_path(self):
+        # Common installation paths for Notepad++
+        paths = [
+            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Notepad++", "notepad++.exe"),
+            os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Notepad++", "notepad++.exe"),
+        ]
+        for path in paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _open_file_dialog_for_editor(self):
         initial_dir = os.path.dirname(self.editor_path_entry.get()) if os.path.exists(self.editor_path_entry.get()) else os.getcwd()
         file_path = filedialog.askopenfilename(
             initialdir=initial_dir, title=_("Select Editor Executable"),
-            filetypes=(("Executable files", "*.exe"), ("All files", "*.*")))
+            filetypes=(("Executable files", "*.exe"), ("All files", "*.*"))
+        )
         if file_path:
             self.editor_path_entry.delete(0, ctk.END)
             self.editor_path_entry.insert(0, file_path)
             self.master.log(f"Selected new editor path: {file_path}")
             # 이것은 모두와 함께 저장되는 전역 설정이므로 _mark_as_modified를 호출할 필요가 없습니다.
+
+    def _handle_editor_button_click(self):
+        notepad_path = self._find_notepadpp_path()
+        if notepad_path:
+            self.editor_path_entry.delete(0, ctk.END)
+            self.editor_path_entry.insert(0, notepad_path)
+            self.master.log(f"Notepad++ found and path set: {notepad_path}")
+        else:
+            # Notepad++ not found, show popup
+            msg = CustomMessageBox(
+                master=self, # Pass self as master
+                title=_("Notepad++ Not Found"),
+                message=_("Notepad++ could not be found. What would you like to do?"),
+                font=ctk.CTkFont(family="맑은 고딕", size=12),
+                options=[_("Browse"), _("Open Download Page"), _("Cancel")] # New options
+            )
+            response = msg.get()
+            if response == _("Browse"):
+                self._open_file_dialog_for_editor()
+            elif response == _("Open Download Page"):
+                webbrowser.open("https://notepad-plus-plus.org/downloads/")
+                self.master.log("User chose to open Notepad++ download page.")
+            else:
+                self.master.log("User cancelled editor path selection.")
+        # Ensure ConfigWindow regains focus after any external interaction
+        self.lift()
+        self.focus_force()
 
     def _mark_as_modified(self, server_name, *args):
         """서버를 수정된 것으로 표시하고 버튼 텍스트를 업데이트합니다."""
@@ -1044,7 +1088,7 @@ class ConfigWindow(ctk.CTkToplevel):
 
     def _open_config_file(self, server_name):
         config_path = self.temp_config.get(server_name, {}).get("config_path")
-        editor_path = self.temp_config.get("editor_path", "notepad.exe") # temp_config에서 편집기 가져오기
+        editor_path = self.temp_config.get("editor_path", "notepad++.exe") # temp_config에서 편집기 가져오기
 
         if not editor_path:
             self.master.log("Editor path is not configured.", level="error")
@@ -1057,8 +1101,19 @@ class ConfigWindow(ctk.CTkToplevel):
                 subprocess.Popen([editor_path, config_path])
                 self.master.log(f"Opening config file for {server_name} with {editor_path}: {config_path}")
             except FileNotFoundError:
-                self.master.log(f"Editor executable not found at: {editor_path}", level="error")
-                CTkMessagebox(title=_("Error"), message=f"{_('Editor not found:')}\n{editor_path}", icon="cancel")
+                if "notepad++.exe" in editor_path.lower():
+                    msg = CTkMessagebox(
+                        title=_("Notepad++ Not Found"), 
+                        message=_("Notepad++ could not be found. Would you like to open the download page?"),
+                        icon="question", 
+                        option_1=_("No"), 
+                        option_2=_("Open Download Page"))
+                    if msg.get() == _("Open Download Page"):
+                        webbrowser.open("https://notepad-plus-plus.org/downloads/")
+                        self.master.log("User chose to open Notepad++ download page.")
+                else:
+                    self.master.log(f"Editor executable not found at: {editor_path}", level="error")
+                    CTkMessagebox(title=_("Error"), message=f"{_('Editor not found:')}\n{editor_path}", icon="cancel")
             except Exception as e:
                 self.master.log(f"Failed to open config file {config_path} with {editor_path}: {e}", level="error")
                 CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
@@ -1287,4 +1342,3 @@ if __name__ == "__main__":
                 logging.error(f"Failed to show fallback error message box: {mb_e}")
     else:
         run_as_admin()
-
