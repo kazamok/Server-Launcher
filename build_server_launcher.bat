@@ -26,8 +26,6 @@ echo.
 echo Cleaning up previous build artifacts...
 if exist "dist" rmdir /s /q "dist"
 if exist "build" rmdir /s /q "build"
-REM if exist "server_launcher.spec" del "server_launcher.spec"
-
 
 echo.
 echo Running PyInstaller to build the executable...
@@ -44,3 +42,4 @@ if exist "dist\server_launcher.exe" (
 
 popd
 pause
+
