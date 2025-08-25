@@ -105,8 +105,8 @@ TRANSLATIONS = {
     "MySQL Service Detection": "MySQL 서비스 감지",
     "Could not find a running MySQL service.": "실행 중인 MySQL 서비스를 찾을 수 없습니다.",
     "Found service: {}. Use this?": "서비스를 찾았습니다: {}. 사용하시겠습니까?",
-    "If you run MySQL from a folder (e.g., XAMPP), choose 'process'.": "만약 폴더(예: XAMPP)에서 MySQL을 실행한다면 'process'를 선택하세요.",
-    "If MySQL is installed and runs on boot, choose 'service'.": "MySQL이 설치되어 부팅 시 자동 실행된다면 'service'를 선택하세요.",
+    "If you run MySQL from a folder (e.g., XAMPP), choose 'process'.": "만약 폴더(예: XAMPP)에서 MySQL을 실행한다면 '프로세서'를 선택하세요.",
+    "If MySQL is installed and runs on boot, choose 'service'.": "MySQL이 설치되어 부팅 시 자동 실행된다면 '서비스'를 선택하세요.",
     "Edit Config File": "설정 파일 열기",
     "Config file not found:": "설정 파일을 찾을 수 없습니다:",
     "Quit Launcher?": "런처 종료?",
@@ -272,7 +272,7 @@ class ServerLauncher(ctk.CTk):
         self.intended_stops = set() # 사용자가 의도적으로 중지한 서버 목록
         self.restart_attempts = {name: 0 for name in SERVER_CONFIG if isinstance(SERVER_CONFIG[name], dict)} # 서버별 재시작 시도 횟수
         self.server_stable_timers = {} # 서버 안정화 타이머
-        self.MAX_RESTARTS = 5 # 최대 재시작 횟수
+        self.MAX_RESTARTS = 2 # 최대 재시작 횟수 2
         self.STABILITY_THRESHOLD = 60 # seconds # 안정화 시간 (초)
 
         # --- 메인 프레임 생성 ---
@@ -672,8 +672,8 @@ class ServerLauncher(ctk.CTk):
                     for proc in psutil.process_iter(['name', 'cmdline']):
                         try:
                             if proc.info['name'].lower() == target_process_name:
-                                # 이전 확인은 배치 파일로 시작된 프로세스에 대해 너무 엄격했습니다.
-                                # 구성된 process_name과 일치시키는 것이 여기에서 더 신뢰할 수 있습니다.
+                                # 이전 확인은 배치 파일로 시작된 프로세스에 대해 너무 엄격해서,
+                                # 구성된 process_name과 일치시키는 것이 여기에서 더 신뢰할 수 있음.
                                 status = "Running"
                                 break
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -1280,3 +1280,4 @@ if __name__ == "__main__":
                 logging.error(f"Failed to show fallback error message box: {mb_e}")
     else:
         run_as_admin()
+
