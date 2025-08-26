@@ -69,7 +69,7 @@ TRANSLATIONS = {
     "런처 종료": "런처 종료",
     "All servers stop commands issued. Exiting application in 2 seconds...": "모든 서버 정지 명령이 실행되었습니다. 2초 후 애플리케이션 종료...",
     "Server Configuration": "서버 설정",
-    "Server Name": "서버 이름",
+    "Server Name": "모듈",
     "Type": "유형",
     "Executable/Service Path": "실행 파일/서비스 경로",
     "Browse": "찾아보기",
