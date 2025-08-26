@@ -3,53 +3,40 @@
         "type": "service",
         "service_name": "MySQL84",
         "config_path": "C:/WISE/Xampp/mysql/bin/my.ini",
-        "auto_restart": false,
-        "process_name": "mysqld.exe",
-        "start_cmd": [
-            "C:/WISE/Server-Launcher/dist/Xampp/mysql_start.bat"
-        ],
-        "stop_cmd": [
-            "C:/WISE/Server-Launcher/dist/Xampp/mysql_stop.bat"
-        ],
-        "cwd": "C:/WISE/Server-Launcher/dist/Xampp",
-        "show_console": false
+        "auto_restart": false
     },
     "Apache": {
         "type": "process",
         "process_name": "httpd.exe",
         "start_cmd": [
-            "C:\\\\WISE\\\\xampp\\\\apache_start.bat"
+            "C:\\WISE\\xampp\\apache_start.bat"
         ],
-        "stop_cmd": [
-            "C:\\\\WISE\\\\xampp\\\\apache_stop.bat"
-        ],
-        "cwd": "C:\\\\WISE\\\\xampp",
+        "stop_cmd": [],
+        "cwd": "C:\\WISE\\xampp",
         "show_console": false,
         "auto_restart": false
     },
     "Backend": {
         "type": "process",
         "process_name": "node.exe",
+        "port": 5000,
         "start_cmd": [
-            "C:\\\\WISE\\\\Account-manager\\\\start_backend.bat"
+            "C:\\WISE\\Account-manager\\start_backend.bat"
         ],
-        "stop_cmd": [
-            "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :5000') do taskkill /PID %a /F"
-        ],
-        "cwd": "C:\\\\WISE\\\\Account-manager",
+        "stop_cmd": [],
+        "cwd": "C:\\WISE\\Account-manager",
         "show_console": false,
         "auto_restart": false
     },
     "Frontend": {
         "type": "process",
         "process_name": "node.exe",
+        "port": 3000,
         "start_cmd": [
-            "C:\\\\WISE\\\\Account-manager\\\\start_frontend.bat"
+            "C:\\WISE\\Account-manager\\start_frontend.bat"
         ],
-        "stop_cmd": [
-            "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :3000') do taskkill /PID %a /F"
-        ],
-        "cwd": "C:\\\\WISE\\\\Account-manager",
+        "stop_cmd": [],
+        "cwd": "C:\\WISE\\Account-manager",
         "show_console": false,
         "auto_restart": false
     },
@@ -57,25 +44,25 @@
         "type": "process",
         "process_name": "authserver.exe",
         "start_cmd": [
-            "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo\\\\authserver.exe"
+            "C:\\WISE\\BUILD\\bin\\RelWithDebInfo\\authserver.exe"
         ],
-        "cwd": "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo",
+        "cwd": "C:\\WISE\\BUILD\\bin\\RelWithDebInfo",
         "show_console": true,
         "config_path": "C:/WISE/BUILD/bin/RelWithDebInfo/configs/authserver.conf",
-        "stop_cmd": [],
-        "auto_restart": false
+        "auto_restart": false,
+        "stop_cmd": []
     },
     "World Server": {
         "type": "process",
         "process_name": "worldserver.exe",
         "start_cmd": [
-            "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo\\\\worldserver.exe"
+            "C:\\WISE\\BUILD\\bin\\RelWithDebInfo\\worldserver.exe"
         ],
-        "cwd": "C:\\\\WISE\\\\BUILD\\\\bin\\\\RelWithDebInfo",
+        "cwd": "C:\\WISE\\BUILD\\bin\\RelWithDebInfo",
         "show_console": true,
         "config_path": "C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf",
-        "stop_cmd": [],
-        "auto_restart": false
+        "auto_restart": false,
+        "stop_cmd": []
     },
     "auto_restart_enabled": false,
     "editor_path": "C:/Program Files/Notepad++/notepad++.exe"
