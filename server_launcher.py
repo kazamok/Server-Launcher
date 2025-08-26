@@ -169,7 +169,6 @@ def load_config():
             "type": "process",
             "process_name": "httpd.exe",
             "start_cmd": [r"C:\WISE\xampp\apache_start.bat"],
-            "stop_cmd": [r"C:\WISE\xampp\apache_stop.bat"],
             "cwd": r"C:\WISE\xampp",
             "show_console": False,
             "auto_restart": False
@@ -179,7 +178,6 @@ def load_config():
             "process_name": "node.exe",
             "port": 5000,
             "start_cmd": [r"C:\WISE\Account-manager\start_backend.bat"],
-            "stop_cmd": [],
             "cwd": r"C:\WISE\Account-manager",
             "show_console": False,
             "auto_restart": False
@@ -189,7 +187,6 @@ def load_config():
             "process_name": "node.exe",
             "port": 3000,
             "start_cmd": [r"C:\WISE\Account-manager\start_frontend.bat"],
-            "stop_cmd": [],
             "cwd": r"C:\WISE\Account-manager",
             "show_console": False,
             "auto_restart": False
@@ -535,23 +532,19 @@ class ServerLauncher(ctk.CTk):
                 self.log(f"Service {name} stopped successfully.")
             
             elif config["type"] == "process":
-                # Method 1: CTRL-C for specific console apps
+                # Method 1: CTRL-C for Auth/World Server
                 if name in ["Auth Server", "World Server"]:
                     try:
                         if name in self.server_processes and self.server_processes[name].poll() is None:
                             proc = self.server_processes[name]
-                            self.log(f"Attempt 1: Sending CTRL-C to {name} with PID {proc.pid}...")
+                            self.log(f"Attempting graceful shutdown (CTRL-C) for {name} with PID {proc.pid}...")
                             os.kill(proc.pid, signal.CTRL_C_EVENT)
-                            proc.wait(timeout=10) # Give it time to shut down
+                            proc.wait(timeout=10)
                             self.log(f"{name} terminated via CTRL-C.")
-                            self.server_processes.pop(name)
-                            return # Success
                         else:
-                            # If not tracked, go directly to fallback
-                            raise ValueError(f"Process for {name} not tracked or already stopped.")
+                            raise ValueError(f"Process for {name} not tracked.")
                     except Exception as e:
-                        self.log(f"CTRL-C method failed for {name}: {e}. Using fallback.", level="warning")
-                        # Fallback: kill by process name
+                        self.log(f"Graceful shutdown failed for {name}: {e}. Using kill-by-name fallback.", level="warning")
                         killed = False
                         for p in psutil.process_iter(['pid', 'name']):
                             if p.info['name'].lower() == config['process_name'].lower():
@@ -560,10 +553,12 @@ class ServerLauncher(ctk.CTk):
                                     psutil.Process(p.info['pid']).kill()
                                     killed = True
                                 except (psutil.NoSuchProcess, psutil.AccessDenied) as kill_e:
-                                    self.log(f"Failed to kill process {p.info['pid']}: {kill_e}", level="error")
-                        if not killed:
-                            self.log(f"Fallback failed: Could not find any running process named {config['process_name']}.", level="warning")
-                        # Clean up the (possibly invalid) handle from tracking
+                                    self.log(f"Failed to kill {p.info['name']} (PID: {p.info['pid']}): {kill_e}", level="error")
+                        if killed:
+                            self.log(f"Fallback for {name} successful.")
+                        else:
+                            self.log(f"Fallback for {name} failed: Could not find process named {config['process_name']}.", level="warning")
+                    finally:
                         if name in self.server_processes:
                             self.server_processes.pop(name)
                     return
@@ -577,7 +572,6 @@ class ServerLauncher(ctk.CTk):
                             if conn.pid is not None:
                                 pid_to_kill = conn.pid
                                 break
-                    
                     if pid_to_kill:
                         self.log(f"Found process for {name} on port {port_to_check} with PID {pid_to_kill}. Terminating...")
                         try:
@@ -595,11 +589,22 @@ class ServerLauncher(ctk.CTk):
                         self.log(f"No process found listening on port {port_to_check} for {name}.", level="warning")
                     return
 
-                # Method 3: Fallback to stop_cmd for other processes
-                if config.get("stop_cmd"): 
-                    command_to_run = config["stop_cmd"][0]
-                    subprocess.run(command_to_run, cwd=config.get("cwd"), shell=True, capture_output=True)
-                    self.log(f"Executed stop command for {name}.")
+                # Method 3: Kill by name for Apache and other general processes
+                killed = False
+                for p in psutil.process_iter(['pid', 'name']):
+                    if p.info['name'].lower() == config['process_name'].lower():
+                        try:
+                            self.log(f"Killing process {p.info['name']} with PID {p.info['pid']}.")
+                            psutil.Process(p.info['pid']).kill()
+                            killed = True
+                        except (psutil.NoSuchProcess, psutil.AccessDenied) as kill_e:
+                            self.log(f"Failed to kill {p.info['name']} (PID: {p.info['pid']}): {kill_e}", level="error")
+                if killed:
+                    self.log(f"Kill-by-name for {name} successful.")
+                else:
+                    self.log(f"Kill-by-name for {name} failed: Could not find process named {config['process_name']}.", level="warning")
+                if name in self.server_processes:
+                    self.server_processes.pop(name)
 
         except Exception as e:
             self.log(f"ERROR stopping {name}: {e}", level="error")
