@@ -282,6 +282,7 @@ class ServerLauncher(ctk.CTk):
         self.server_checkbox_vars = {} # 체크박스 변수 저장
         self.checkboxes = {} # 체크박스 위젯 저장
         self.select_all_var = ctk.BooleanVar() # '전체 선택' 체크박스 변수
+        self.shutdown_event = threading.Event() # 종료 신호
 
         # --- 자동 재시작 관련 변수 ---
         self.intended_stops = set() # 사용자가 의도적으로 중지한 서버 목록
@@ -738,7 +739,7 @@ class ServerLauncher(ctk.CTk):
         return status
 
     def monitor_servers(self):
-        while True:
+        while not self.shutdown_event.is_set():
             for name, config in SERVER_CONFIG.items():
                 if not isinstance(config, dict): # 'auto_restart_enabled' 또는 'editor_path'와 같은 비서버 항목 건너뛰기
                     continue 
@@ -786,7 +787,7 @@ class ServerLauncher(ctk.CTk):
                         # 선택적으로 사용자에게 메시지를 표시할 수 있습니다.
                         # self.after(0, lambda n=name: CTkMessagebox(title="Auto-restart Disabled", message=f"{n} failed to start multiple times and auto-restart has been disabled for it."))
 
-            time.sleep(5)
+            self.shutdown_event.wait(5) # time.sleep(5) 대신 사용
 
     def _mark_server_as_stable(self, name):
         """서버가 안정적으로 유지되면 재시작 횟수를 재설정하기 위해 타이머에 의해 호출됩니다."""
@@ -810,6 +811,8 @@ class ServerLauncher(ctk.CTk):
         response = msg.get()
         if response == _("Yes"):
             self.log("User confirmed quit. Exiting launcher.")
+            self.shutdown_event.set()
+            self.monitor_thread.join(timeout=6) # 모니터링 스레드가 깔끔하게 종료될 때까지 기다립니다.
             self.destroy()
         else:
             self.log("User cancelled quit.")
