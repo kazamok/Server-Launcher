@@ -26,6 +26,7 @@ check_and_install_dependencies()
 
 import customtkinter as ctk
 import subprocess
+import signal
 import threading
 import time
 import os
@@ -56,7 +57,7 @@ TRANSLATIONS = {
     "Stop": "정지",
     "Path": "경로",
     "Service": "서비스", # "Service: MySQL84"용
-    "Running": "실행 중",
+    "Running": "시작됨",
     "Stopped": "정지됨",
     "Error": "오류",
     "AUTO-RESTART": "자동 재시작",
@@ -124,6 +125,7 @@ TRANSLATIONS = {
     "Notepad++ could not be found. Would you like to open the download page?": "Notepad++를 찾을 수 없습니다. 다운로드 페이지를 여시겠습니까?",
     "Open Download Page": "다운로드 페이지 열기",
     "Notepad++ could not be found. What would you like to do?": "Notepad++를 찾을 수 없습니다. 무엇을 하시겠습니까?",
+    "Stopped by internal CTRL-C signal": "내부 CTRL-C 신호로 정지",
 }
 
 # --- 번역 함수 ---
@@ -160,58 +162,58 @@ def load_config():
         "MySQL": {
             "type": "service",
             "service_name": "MySQL84",
-            "config_path": "C:/WISE/Xampp/mysql/bin/my.ini"
+            "config_path": "C:/WISE/Xampp/mysql/bin/my.ini",
+            "auto_restart": False
         },
-        # "MySQL_Process_Example": { # MySQL을 프로세스로 사용하려면 주석을 해제하고 수정하세요
-        #     "type": "process",
-        #     "process_name": "mysqld.exe",
-        #     "start_cmd": ["C:\\xampp\\mysql\\bin\\mysqld.exe", "--console"], # 예시 경로, 필요에 따라 수정
-        #     "stop_cmd": ["taskkill", "/F", "/IM", "mysqld.exe"], # 예시 중지 명령
-        #     "cwd": "C:\\xampp\\mysql\\bin", # 예시 작업 디렉토리
-        #     "show_console": True,
-        # },
         "Apache": {
             "type": "process",
             "process_name": "httpd.exe",
-            "start_cmd": [r"C:\\WISE\\xampp\\apache_start.bat"],
-            "stop_cmd": [r"C:\\WISE\\xampp\\apache_stop.bat"],
-            "cwd": r"C:\\WISE\\xampp",
+            "start_cmd": [r"C:\WISE\xampp\apache_start.bat"],
+            "stop_cmd": [r"C:\WISE\xampp\apache_stop.bat"],
+            "cwd": r"C:\WISE\xampp",
             "show_console": False,
+            "auto_restart": False
         },
         "Backend": {
             "type": "process",
-            "process_name": "node.exe", # node.exe가 백엔드를 실행한다고 가정
-            "start_cmd": [r"C:\\WISE\\Account-manager\\start_backend.bat"],
-            "stop_cmd": ["for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :5000') do taskkill /PID %a /F"],
-            "cwd": r"C:\\WISE\\Account-manager",
+            "process_name": "node.exe",
+            "port": 5000,
+            "start_cmd": [r"C:\WISE\Account-manager\start_backend.bat"],
+            "stop_cmd": [],
+            "cwd": r"C:\WISE\Account-manager",
             "show_console": False,
+            "auto_restart": False
         },
         "Frontend": {
             "type": "process",
-            "process_name": "node.exe", # node.exe가 프론트엔드를 실행한다고 가정
-            "start_cmd": [r"C:\\WISE\\Account-manager\\start_frontend.bat"],
-            "stop_cmd": ["for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :3000') do taskkill /PID %a /F"],
-            "cwd": r"C:\\WISE\\Account-manager",
+            "process_name": "node.exe",
+            "port": 3000,
+            "start_cmd": [r"C:\WISE\Account-manager\start_frontend.bat"],
+            "stop_cmd": [],
+            "cwd": r"C:\WISE\Account-manager",
             "show_console": False,
+            "auto_restart": False
         },
         "Auth Server": {
             "type": "process",
             "process_name": "authserver.exe",
-            "start_cmd": [r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo\\authserver.exe"],
-            "cwd": r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo",
-            "show_console": False,
-            "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/authserver.conf"
+            "start_cmd": [r"C:\WISE\BUILD\bin\RelWithDebInfo\authserver.exe"],
+            "cwd": r"C:\WISE\BUILD\bin\RelWithDebInfo",
+            "show_console": True,
+            "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/authserver.conf",
+            "auto_restart": False
         },
         "World Server": {
             "type": "process",
             "process_name": "worldserver.exe",
-            "start_cmd": [r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo\\worldserver.exe"],
-            "cwd": r"C:\\WISE\\BUILD\\bin\\RelWithDebInfo",
-            "show_console": False,
-            "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf"
+            "start_cmd": [r"C:\WISE\BUILD\bin\RelWithDebInfo\worldserver.exe"],
+            "cwd": r"C:\WISE\BUILD\bin\RelWithDebInfo",
+            "show_console": True,
+            "config_path": r"C:/WISE/BUILD/bin/RelWithDebInfo/configs/worldserver.conf",
+            "auto_restart": False
         },
-        "auto_restart_enabled": False, # 자동 재시작을 위한 새로운 설정
-        "editor_path": "notepad++.exe", # 기본 에디터
+        "auto_restart_enabled": False,
+        "editor_path": "notepad++.exe"
     }
 
     try:
@@ -464,7 +466,7 @@ class ServerLauncher(ctk.CTk):
 
         # 더블 클릭을 방지하기 위해 즉시 UI 업데이트
         self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
-        self.server_widgets[name]["start"].configure(state="disabled")
+        self.server_widgets[name]["start"].configure(text=_("Progressing..."), state="disabled")
         self.server_widgets[name]["stop"].configure(state="disabled")
 
         config = SERVER_CONFIG[name]
@@ -478,8 +480,16 @@ class ServerLauncher(ctk.CTk):
                 command_to_run = config["start_cmd"]
                 use_shell = command_to_run[0].lower().endswith((".bat", ".cmd"))
                 show_console = config.get("show_console", False)
-                creationflags = 0 if use_shell or show_console else subprocess.CREATE_NO_WINDOW
                 
+                creationflags = 0
+                if use_shell or show_console:
+                    # For console apps we want to be able to send CTRL+C, so they need a new process group.
+                    # This applies to Auth Server and World Server.
+                    if name in ["Auth Server", "World Server"]:
+                        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+                else:
+                    creationflags = subprocess.CREATE_NO_WINDOW
+
                 proc = subprocess.Popen(
                     command_to_run, 
                     cwd=config.get("cwd"), 
@@ -514,7 +524,7 @@ class ServerLauncher(ctk.CTk):
         # 더블 클릭을 방지하기 위해 즉시 UI 업데이트
         self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
         self.server_widgets[name]["start"].configure(state="disabled")
-        self.server_widgets[name]["stop"].configure(state="disabled")
+        self.server_widgets[name]["stop"].configure(text=_("Progressing..."), state="disabled")
 
         config = SERVER_CONFIG[name]
         self.log(f"Attempting to stop {name}...")
@@ -523,59 +533,75 @@ class ServerLauncher(ctk.CTk):
             if config["type"] == "service":
                 subprocess.run(["net", "stop", config["service_name"]], check=True, capture_output=True, text=True)
                 self.log(f"Service {name} stopped successfully.")
+            
             elif config["type"] == "process":
-                # 먼저 추적된 프로세스와 그 자식 프로세스를 종료해 보십시오.
-                if name in self.server_processes and self.server_processes[name].poll() is None:
-                    pid = self.server_processes[name].pid
-                    self.log(f"Terminating {name} process tree with parent PID {pid}...")
+                # Method 1: CTRL-C for specific console apps
+                if name in ["Auth Server", "World Server"]:
                     try:
-                        parent = psutil.Process(pid)
-                        # 자식 프로세스 먼저 종료
-                        children = parent.children(recursive=True)
-                        for child in children:
-                            self.log(f"Terminating child process {child.name()} with PID {child.pid}")
-                            child.terminate()
-                        # 그 다음 부모 프로세스 종료
-                        parent.terminate()
-                        # 프로세스가 종료될 때까지 기다립니다.
-                        psutil.wait_procs(children + [parent], timeout=3)
-                    except psutil.NoSuchProcess:
-                        self.log(f"Process with PID {pid} not found, it might have already been stopped.", level="warning")
-                    
-                    self.server_processes.pop(name) # 추적에서 제거
+                        if name in self.server_processes and self.server_processes[name].poll() is None:
+                            proc = self.server_processes[name]
+                            self.log(f"Attempt 1: Sending CTRL-C to {name} with PID {proc.pid}...")
+                            os.kill(proc.pid, signal.CTRL_C_EVENT)
+                            proc.wait(timeout=10) # Give it time to shut down
+                            self.log(f"{name} terminated via CTRL-C.")
+                            self.server_processes.pop(name)
+                            return # Success
+                        else:
+                            # If not tracked, go directly to fallback
+                            raise ValueError(f"Process for {name} not tracked or already stopped.")
+                    except Exception as e:
+                        self.log(f"CTRL-C method failed for {name}: {e}. Using fallback.", level="warning")
+                        # Fallback: kill by process name
+                        killed = False
+                        for p in psutil.process_iter(['pid', 'name']):
+                            if p.info['name'].lower() == config['process_name'].lower():
+                                try:
+                                    self.log(f"Fallback: Killing process {p.info['name']} with PID {p.info['pid']}.")
+                                    psutil.Process(p.info['pid']).kill()
+                                    killed = True
+                                except (psutil.NoSuchProcess, psutil.AccessDenied) as kill_e:
+                                    self.log(f"Failed to kill process {p.info['pid']}: {kill_e}", level="error")
+                        if not killed:
+                            self.log(f"Fallback failed: Could not find any running process named {config['process_name']}.", level="warning")
+                        # Clean up the (possibly invalid) handle from tracking
+                        if name in self.server_processes:
+                            self.server_processes.pop(name)
                     return
 
-                # 중지 명령이 있으면 실행
-                if config.get("stop_cmd"):
-                    # shell=True를 사용할 때 명령은 문자열이어야 합니다.
-                    # 설정은 명령을 리스트로 저장하므로 첫 번째 요소를 사용합니다.
-                    command_to_run = config["stop_cmd"][0]
-                    # cmd 창이 깜박이고 콘솔에 출력되는 것을 방지하려면 capture_output=True를 사용하십시오.
-                    subprocess.run(command_to_run, cwd=config.get("cwd"), check=True, shell=True, capture_output=True)
-                    self.log(f"Executed stop command for {name}.")
-                else:
-                    # 대체 방법: 해당 이름의 모든 프로세스를 종료합니다 (주의해서 사용)
-                    # 이 부분은 필수 프로세스를 죽이지 않도록 주의해야 합니다.
-                    found_and_terminated = False
-                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                # Method 2: Port-based termination for Backend/Frontend
+                if "port" in config:
+                    port_to_check = config["port"]
+                    pid_to_kill = None
+                    for conn in psutil.net_connections(kind='inet'):
+                        if conn.laddr.port == port_to_check and conn.status == psutil.CONN_LISTEN:
+                            if conn.pid is not None:
+                                pid_to_kill = conn.pid
+                                break
+                    
+                    if pid_to_kill:
+                        self.log(f"Found process for {name} on port {port_to_check} with PID {pid_to_kill}. Terminating...")
                         try:
-                            # 프로세스 이름이 구성된 process_name과 일치하는지 확인
-                            # 그리고 명령줄에 start_cmd가 포함되어 있는지 확인 (더 구체적인 일치를 위해)
-                            if proc.info['name'].lower() == config['process_name'].lower():
-                                cmdline = proc.cmdline()
-                                # start_cmd의 일부가 프로세스의 명령줄에 있는지 확인
-                                if any(os.path.basename(cmd_part).lower() in arg.lower() for cmd_part in config['start_cmd'] for arg in cmdline):
-                                    self.log(f"Found running process {proc.info['name']} with PID {proc.info['pid']}. Terminating...", level="warning")
-                                    psutil.Process(proc.info['pid']).terminate()
-                                    found_and_terminated = True
-                                    break # 하나의 인스턴스만 종료
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            continue
-                    if found_and_terminated:
-                        self.log(f"Process {name} terminated via fallback method.")
+                            parent = psutil.Process(pid_to_kill)
+                            children = parent.children(recursive=True)
+                            for child in children:
+                                self.log(f"Terminating child process {child.name()} with PID {child.pid}")
+                                child.terminate()
+                            parent.terminate()
+                            psutil.wait_procs(children + [parent], timeout=3)
+                            self.log(f"Successfully terminated process tree for {name}.")
+                        except psutil.NoSuchProcess:
+                            self.log(f"Process with PID {pid_to_kill} was already gone.", level="warning")
                     else:
-                        self.log(f"No running process found for {name} to terminate via fallback.", level="warning")
-        except (subprocess.CalledProcessError, psutil.NoSuchProcess, Exception) as e:
+                        self.log(f"No process found listening on port {port_to_check} for {name}.", level="warning")
+                    return
+
+                # Method 3: Fallback to stop_cmd for other processes
+                if config.get("stop_cmd"): 
+                    command_to_run = config["stop_cmd"][0]
+                    subprocess.run(command_to_run, cwd=config.get("cwd"), shell=True, capture_output=True)
+                    self.log(f"Executed stop command for {name}.")
+
+        except Exception as e:
             self.log(f"ERROR stopping {name}: {e}", level="error")
 
     def start_all_servers(self):
@@ -677,23 +703,27 @@ class ServerLauncher(ctk.CTk):
                 if service.status() == 'running':
                     status = "Running"
             elif config["type"] == "process":
-                # 기본 확인: 추적된 프로세스가 살아 있습니까?
-                if name in self.server_processes and self.server_processes[name].poll() is None:
-                     status = "Running"
+                # If a port is defined, use it as the primary check
+                if "port" in config:
+                    port_to_check = config["port"]
+                    for conn in psutil.net_connections(kind='inet'):
+                        if conn.laddr.port == port_to_check and conn.status == psutil.CONN_LISTEN:
+                            status = "Running"
+                            break # Found it, no need to check further
+                    # If loop finishes without finding the port, status remains "Stopped"
                 else:
-                    # 대체 확인: 해당 이름으로 실행 중인 프로세스가 있습니까?
-                    # 더 정확한 일치를 위해 구성된 process_name 사용
-                    target_process_name = config['process_name'].lower()
-
-                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                        try:
-                            if proc.info['name'].lower() == target_process_name:
-                                # 이전 확인은 배치 파일로 시작된 프로세스에 대해 너무 엄격해서,
-                                # 구성된 process_name과 일치시키는 것이 여기에서 더 신뢰할 수 있음.
-                                status = "Running"
-                                break
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            continue
+                    # Fallback to original process name check for other processes
+                    if name in self.server_processes and self.server_processes[name].poll() is None:
+                        status = "Running"
+                    else:
+                        target_process_name = config['process_name'].lower()
+                        for proc in psutil.process_iter(['pid', 'name']):
+                            try:
+                                if proc.info['name'].lower() == target_process_name:
+                                    status = "Running"
+                                    break
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                continue
         except psutil.NoSuchProcess:
             status = "Stopped"
         except Exception as e:
@@ -722,6 +752,10 @@ class ServerLauncher(ctk.CTk):
                 # 버튼 상태 업데이트
                 start_button = self.server_widgets[name]["start"]
                 stop_button = self.server_widgets[name]["stop"]
+
+                # 버튼 텍스트를 기본값으로 재설정
+                start_button.configure(text=_("Start"))
+                stop_button.configure(text=_("Stop"))
 
                 if status == "Running":
                     start_button.configure(state="disabled")
@@ -1198,13 +1232,21 @@ class ConfigWindow(ctk.CTkToplevel):
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
             row_frame.pack(fill="x", padx=10, pady=2)
             ctk.CTkLabel(row_frame, text=_("Stop Cmd:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=100, anchor="w").pack(side="left")
-            stop_cmd_entry = ctk.CTkEntry(row_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
-            stop_cmd_entry.pack(side="left", fill="x", expand=True)
-            stop_cmd_list = config_data.get("stop_cmd", [])
-            if stop_cmd_list:
-                stop_cmd_entry.insert(0, stop_cmd_list[0])
-            stop_cmd_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
-            self.server_config_widgets[server_name]["widgets"]["stop_cmd_entry"] = stop_cmd_entry
+            
+            # Special handling for Auth/World server stop command
+            if server_name in ["Auth Server", "World Server"]:
+                stop_cmd_label = ctk.CTkLabel(row_frame, text=_("Stopped by internal CTRL-C signal"), font=ctk.CTkFont(family="맑은 고딕", size=12), text_color="gray")
+                stop_cmd_label.pack(side="left", fill="x", expand=True)
+                # Add a dummy entry to prevent errors in the save function
+                self.server_config_widgets[server_name]["widgets"]["stop_cmd_entry"] = ctk.CTkEntry(row_frame) 
+            else:
+                stop_cmd_entry = ctk.CTkEntry(row_frame, font=ctk.CTkFont(family="맑은 고딕", size=12))
+                stop_cmd_entry.pack(side="left", fill="x", expand=True)
+                stop_cmd_list = config_data.get("stop_cmd", [])
+                if stop_cmd_list:
+                    stop_cmd_entry.insert(0, stop_cmd_list[0])
+                stop_cmd_entry.bind("<KeyRelease>", lambda event, n=server_name: self._mark_as_modified(n))
+                self.server_config_widgets[server_name]["widgets"]["stop_cmd_entry"] = stop_cmd_entry
 
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
             row_frame.pack(fill="x", padx=10, pady=2)
