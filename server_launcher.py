@@ -271,7 +271,7 @@ class ServerLauncher(ctk.CTk):
 
         self.title(_("Server Launcher"))
         self.geometry("1000x580")
-        self.minsize(1000, 580)
+        self.minsize(1000, 700)
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("blue")
 
@@ -324,10 +324,10 @@ class ServerLauncher(ctk.CTk):
 
         # --- 로그 박스 ---
         log_frame = ctk.CTkFrame(main_frame)
-        log_frame.pack(fill="x", expand=False, padx=10, pady=10)
+        log_frame.pack(fill="both", expand=True, padx=10, pady=10)
         log_label = ctk.CTkLabel(log_frame, text=_("Logs"), font=ctk.CTkFont(family="맑은 고딕", size=14))
         log_label.pack(anchor="w", padx=10, pady=(5,0))
-        self.log_box = ctk.CTkTextbox(log_frame, state="disabled", height=100, font=ctk.CTkFont(family="맑은 고딕", size=12))
+        self.log_box = ctk.CTkTextbox(log_frame, state="disabled", font=ctk.CTkFont(family="맑은 고딕", size=12))
         self.log_box.pack(fill="both", expand=True, padx=10, pady=10)
 
         # --- 종료 버튼 ---
