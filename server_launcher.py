@@ -837,16 +837,13 @@ class ServerLauncher(ctk.CTk):
             title=_("Quit Launcher?"),
             message=_("One or more servers are currently running."),
             font=ctk.CTkFont(family="맑은 고딕", size=12),
-            options=[_("Stop All & Quit"), _("Just Quit Launcher"), _("Cancel")]
+            options=[_("Stop All & Quit"), _("Cancel")]
         )
         response = msg.get()
 
         if response == _("Stop All & Quit"):
             self.log("User chose to stop all servers and quit. Initiating shutdown...")
             self.stop_all_and_shutdown(running_servers)
-        elif response == _("Just Quit Launcher"):
-            self.log("User chose to quit launcher only. Servers will remain running.")
-            self.perform_shutdown()
         else: # Cancel or window closed
             self.log("User cancelled quit.")
 
