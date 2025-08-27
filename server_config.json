@@ -60,5 +60,6 @@
         "auto_restart": false
     },
     "auto_restart_enabled": false,
-    "editor_path": "notepad++.exe"
+    "editor_path": "notepad++.exe",
+    "discord_webhook_url": "https://discord.com/api/webhooks/1410204112645128222/eIxZdw5rGj1i-DHKMp2En-mi2pLpvQ8v9th7MEE3_ZRbPoMizw6dOVY1Sr2xlaKQqXpC"
 }

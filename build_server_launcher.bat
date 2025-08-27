@@ -13,8 +13,8 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Installing dependencies...
-python -m pip install customtkinter psutil CTkMessagebox pyinstaller
+echo Installing dependencies from requirements.txt...
+python -m pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo Failed to install dependencies. Aborting.
     popd

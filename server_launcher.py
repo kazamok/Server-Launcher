@@ -2,6 +2,7 @@ import subprocess
 import sys
 import importlib.util
 import webbrowser
+import requests
 
 # --- 의존성 검사 및 설치 ---
 def check_and_install_dependencies():
@@ -266,6 +267,31 @@ def save_config(config_data):
     except Exception as e:
         logging.error(f"Error saving config file: {e}")
 
+def send_discord_notification(message):
+    """디스코드로 알림 메시지를 비동기적으로 보냅니다."""
+    def _send():
+        webhook_url = SERVER_CONFIG.get("discord_webhook_url")
+        if not webhook_url:
+            logging.warning("Discord webhook URL is not configured. Skipping notification.")
+            return
+
+        embed = {
+            "description": message,
+            "color": 5814783,  # Blue-ish color
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+        }
+        payload = {
+            "embeds": [embed]
+        }
+
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Failed to send Discord notification: {e}")
+
+    threading.Thread(target=_send, daemon=True).start()
+
 # --- 전역 설정 변수 ---
 SERVER_CONFIG = load_config()
 
@@ -347,7 +373,7 @@ class ServerLauncher(ctk.CTk):
         # --- 모니터링 시작 ---
         self.monitor_thread = threading.Thread(target=self.monitor_servers, daemon=True)
         self.monitor_thread.start()
-        self.log(_("Launcher started. Monitoring servers..."))
+        self.log(_("Launcher started. Monitoring servers..."), notify=True)
 
         # --- 창 닫기 처리 ---
         self.protocol("WM_DELETE_WINDOW", self.on_quit_button_click)
@@ -439,7 +465,7 @@ class ServerLauncher(ctk.CTk):
         self.start_all_button.configure(state=button_state)
         self.stop_all_button.configure(state=button_state)
 
-    def log(self, message, level="info"):
+    def log(self, message, level="info", notify=False):
         if level.lower() == "info":
             logging.info(message)
         elif level.lower() == "error":
@@ -453,6 +479,10 @@ class ServerLauncher(ctk.CTk):
         full_message = f"[{timestamp}] {message}\n"
         
         self.after(0, self._update_log_box, full_message)
+
+        if notify:
+            notification_message = f"[{level.upper()}] {message}"
+            send_discord_notification(notification_message)
 
     def _update_log_box(self, message):
         self.log_box.configure(state="normal")
@@ -483,7 +513,7 @@ class ServerLauncher(ctk.CTk):
         try:
             if config["type"] == "service":
                 subprocess.run(["net", "start", config["service_name"]], check=True, capture_output=True, text=True)
-                self.log(f"Service {name} started successfully.")
+                self.log(f"Service {name} started successfully.", notify=True)
             elif config["type"] == "process":
                 command_to_run = config["start_cmd"]
                 use_shell = command_to_run[0].lower().endswith((".bat", ".cmd"))
@@ -506,7 +536,7 @@ class ServerLauncher(ctk.CTk):
                     creationflags=creationflags
                 )
                 self.server_processes[name] = proc
-                self.log(f"Started {name} with PID {proc.pid}.")
+                self.log(f"Started {name} with PID {proc.pid}.", notify=True)
             
             # 서버가 성공적으로 시작되면 재시작 시도 횟수를 재설정하는 검사를 예약합니다.
             if name in self.server_stable_timers:
@@ -517,7 +547,7 @@ class ServerLauncher(ctk.CTk):
             timer.start()
 
         except (subprocess.CalledProcessError, FileNotFoundError, Exception) as e:
-            self.log(f"ERROR starting {name}: {e}", level="error")
+            self.log(f"ERROR starting {name}: {e}", level="error", notify=True)
             # 시작이 실패하면 즉시 중지된 것으로 간주되므로 바로 다시 시작하지 마십시오.
             self.intended_stops.add(name)
 
@@ -541,7 +571,7 @@ class ServerLauncher(ctk.CTk):
         try:
             if config["type"] == "service":
                 subprocess.run(["net", "stop", config["service_name"]], check=True, capture_output=True, text=True)
-                self.log(f"Service {name} stopped successfully.")
+                self.log(f"Service {name} stopped successfully.", notify=True)
             
             elif config["type"] == "process":
                 # Method 1: CTRL-C for Auth/World Server
@@ -552,7 +582,7 @@ class ServerLauncher(ctk.CTk):
                             self.log(f"Attempting graceful shutdown (CTRL-C) for {name} with PID {proc.pid}...")
                             os.kill(proc.pid, signal.CTRL_C_EVENT)
                             proc.wait(timeout=10)
-                            self.log(f"{name} terminated via CTRL-C.")
+                            self.log(f"{name} terminated via CTRL-C.", notify=True)
                         else:
                             raise ValueError(f"Process for {name} not tracked.")
                     except Exception as e:
@@ -567,7 +597,7 @@ class ServerLauncher(ctk.CTk):
                                 except (psutil.NoSuchProcess, psutil.AccessDenied) as kill_e:
                                     self.log(f"Failed to kill {p.info['name']} (PID: {p.info['pid']}): {kill_e}", level="error")
                         if killed:
-                            self.log(f"Fallback for {name} successful.")
+                            self.log(f"Fallback for {name} successful.", notify=True)
                         else:
                             self.log(f"Fallback for {name} failed: Could not find process named {config['process_name']}.", level="warning")
                     finally:
@@ -594,7 +624,7 @@ class ServerLauncher(ctk.CTk):
                                 child.terminate()
                             parent.terminate()
                             psutil.wait_procs(children + [parent], timeout=3)
-                            self.log(f"Successfully terminated process tree for {name}.")
+                            self.log(f"Successfully terminated process tree for {name}.", notify=True)
                         except psutil.NoSuchProcess:
                             self.log(f"Process with PID {pid_to_kill} was already gone.", level="warning")
                     else:
@@ -612,14 +642,14 @@ class ServerLauncher(ctk.CTk):
                         except (psutil.NoSuchProcess, psutil.AccessDenied) as kill_e:
                             self.log(f"Failed to kill {p.info['name']} (PID: {p.info['pid']}): {kill_e}", level="error")
                 if killed:
-                    self.log(f"Kill-by-name for {name} successful.")
+                    self.log(f"Kill-by-name for {name} successful.", notify=True)
                 else:
                     self.log(f"Kill-by-name for {name} failed: Could not find process named {config['process_name']}.", level="warning")
                 if name in self.server_processes:
                     self.server_processes.pop(name)
 
         except Exception as e:
-            self.log(f"ERROR stopping {name}: {e}", level="error")
+            self.log(f"ERROR stopping {name}: {e}", level="error", notify=True)
 
     def start_all_servers(self):
         # 1. 선택한 서버 중 실제로 시작해야 하는 서버를 식별합니다.
@@ -789,10 +819,10 @@ class ServerLauncher(ctk.CTk):
                 if config.get("auto_restart", False) and status == "Stopped" and name not in self.intended_stops:
                     if self.restart_attempts.get(name, 0) < self.MAX_RESTARTS:
                         self.restart_attempts[name] = self.restart_attempts.get(name, 0) + 1
-                        self.log(f"AUTO-RESTART: {name} is stopped unexpectedly. Restarting... (Attempt {self.restart_attempts[name]}/{self.MAX_RESTARTS})", level="warning")
+                        self.log(f"AUTO-RESTART: {name} is stopped unexpectedly. Restarting... (Attempt {self.restart_attempts[name]}/{self.MAX_RESTARTS})", level="warning", notify=True)
                         self.start_server(name, is_auto_restart=True)
                     else:
-                        self.log(f"AUTO-RESTART DISABLED: {name} has failed to start {self.MAX_RESTARTS} times. Disabling auto-restart for this server.", level="error")
+                        self.log(f"AUTO-RESTART DISABLED: {name} has failed to start {self.MAX_RESTARTS} times. Disabling auto-restart for this server.", level="error", notify=True)
                         # 로그 스팸을 방지하기 위해 이 세션에 대한 자동 재시작 비활성화
                         config["auto_restart"] = False 
                         # 선택적으로 사용자에게 메시지를 표시할 수 있습니다.
@@ -891,7 +921,7 @@ class ServerLauncher(ctk.CTk):
 
     def perform_shutdown(self):
         """ 최종 종료 시퀀스를 수행합니다. """
-        self.log("Performing final shutdown.")
+        self.log("Performing final shutdown.", notify=True)
         self.shutdown_event.set()
         # 모니터 스레드가 종료될 시간을 줌
         if self.monitor_thread.is_alive():
@@ -1501,7 +1531,7 @@ if __name__ == "__main__":
             root.withdraw() # 빈 루트 창 숨기기
             messagebox.showerror(
                 "Critical Error",
-                f"A critical error occurred and the launcher must close.\n\n"
+                f"A critical error occurred and the launcher must close.\n\n" 
                 f"Please check the 'server_launcher.log' file for details.\n\n"
                 f"Error: {e}"
             )
