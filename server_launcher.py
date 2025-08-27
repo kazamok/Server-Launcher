@@ -102,7 +102,7 @@ TRANSLATIONS = {
     "The following configuration errors occurred:\n\n": "다음 설정 오류가 발생했습니다:\n\n",
     "Process Name for {} cannot be empty.": "{}의 프로세스 이름은 비워둘 수 없습니다.",
     "Start Command for {} cannot be empty.": "{}의 시작 명령어는 비워둘 수 없습니다.",
-    "Start Command path for {} does not exist:\n{}:": "{}의 시작 명령어 경로가 존재하지 않습니다:\n{}:",
+    "Start Command path for {} does not exist:{}:": "{}의 시작 명령어 경로가 존재하지 않습니다:{}:",
     "Service Name for {} cannot be empty.": "{}의 서비스 이름은 비워둘 수 없습니다.",
     # MySQL 관련
     "Find Service": "서비스 찾기",
@@ -115,7 +115,7 @@ TRANSLATIONS = {
     "Config file not found:": "설정 파일을 찾을 수 없습니다:",
     "Quit Launcher?": "런처 종료?",
     "Are you sure you want to quit?": "정말로 종료하시겠습니까?",
-    "Are you sure you want to quit?\nRunning servers will not be affected.": "정말로 종료하시겠습니까?\n실행 중인 서버는 종료되지 않습니다.",
+    "Are you sure you want to quit?Running servers will not be affected.": "정말로 종료하시겠습니까?실행 중인 서버는 종료되지 않습니다.",
     # 종료 옵션
     "Stop All & Quit": "서버 정지 후 종료",
     "Just Quit Launcher": "런처만 종료",
@@ -309,6 +309,7 @@ class ServerLauncher(ctk.CTk):
         # --- 클래스 변수 초기화 ---
         self.server_widgets = {}  # 서버별 UI 위젯 저장
         self.server_processes = {} # 서버 프로세스(Popen 객체) 저장
+        self.server_last_status = {} # 서버의 마지막 상태를 추적
         self.last_all_action_time = 0 # '모두 시작/정지' 버튼 쿨다운
         self.server_checkbox_vars = {} # 체크박스 변수 저장
         self.checkboxes = {} # 체크박스 위젯 저장
@@ -740,45 +741,6 @@ class ServerLauncher(ctk.CTk):
         self.log(f"Timeout waiting for {name} to reach {target_status}.", level="warning")
         return False
 
-    def check_server_status(self, name):
-        config = SERVER_CONFIG[name]
-        status = "Stopped"
-        
-        try:
-            if config["type"] == "service":
-                service = psutil.win_service_get(config["service_name"])
-                if service.status() == 'running':
-                    status = "Running"
-            elif config["type"] == "process":
-                # If a port is defined, use it as the primary check
-                if "port" in config:
-                    port_to_check = config["port"]
-                    for conn in psutil.net_connections(kind='inet'):
-                        if conn.laddr.port == port_to_check and conn.status == psutil.CONN_LISTEN:
-                            status = "Running"
-                            break # Found it, no need to check further
-                    # If loop finishes without finding the port, status remains "Stopped"
-                else:
-                    # Fallback to original process name check for other processes
-                    if name in self.server_processes and self.server_processes[name].poll() is None:
-                        status = "Running"
-                    else:
-                        target_process_name = config['process_name'].lower()
-                        for proc in psutil.process_iter(['pid', 'name']):
-                            try:
-                                if proc.info['name'].lower() == target_process_name:
-                                    status = "Running"
-                                    break
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                continue
-        except psutil.NoSuchProcess:
-            status = "Stopped"
-        except Exception as e:
-            status = "Error"
-            self.log(f"Error checking status for {name}: {e}", level="error")
-            
-        return status
-
     def monitor_servers(self):
         while not self.shutdown_event.is_set():
             for name, config in SERVER_CONFIG.items():
@@ -786,6 +748,19 @@ class ServerLauncher(ctk.CTk):
                     continue 
 
                 status = self.check_server_status(name)
+                previous_status = self.server_last_status.get(name, "Unknown")
+
+                # 디버깅 로그 추가
+                is_intended = name in self.intended_stops
+                if previous_status == "Running" and status == "Stopped":
+                    self.log(f"DEBUG: State change for {name}: prev={previous_status}, cur={status}, intended={is_intended}", level="info")
+
+                # 비정상 종료 감지 로직
+                if previous_status == "Running" and status == "Stopped" and not is_intended:
+                    self.log(f"UNEXPECTED SHUTDOWN: {name} has stopped unexpectedly.", level="error", notify=True)
+
+                # UI 업데이트 전에 마지막 상태를 기록
+                self.server_last_status[name] = status
                 
                 # 상태 레이블 업데이트
                 widget = self.server_widgets[name]["status"]
@@ -829,6 +804,39 @@ class ServerLauncher(ctk.CTk):
                         # self.after(0, lambda n=name: CTkMessagebox(title="Auto-restart Disabled", message=f"{n} failed to start multiple times and auto-restart has been disabled for it."))
 
             self.shutdown_event.wait(5) # time.sleep(5) 대신 사용
+
+    def check_server_status(self, name):
+        config = SERVER_CONFIG[name]
+        try:
+            if config["type"] == "service":
+                service = psutil.win_service_get(config["service_name"])
+                if service.status() == 'running':
+                    return "Running"
+            elif config["type"] == "process":
+                # 1. Port-based check (most reliable for network services)
+                if "port" in config:
+                    port_to_check = config["port"]
+                    for conn in psutil.net_connections(kind='inet'):
+                        if conn.laddr.port == port_to_check and conn.status == psutil.CONN_LISTEN:
+                            return "Running"
+                    # If we get here, the port is not listening
+                    return "Stopped"
+                # 2. Name-based check (for all other processes)
+                else:
+                    target_process_name = config['process_name'].lower()
+                    for proc in psutil.process_iter(['pid', 'name']):
+                        try:
+                            if proc.info['name'].lower() == target_process_name:
+                                return "Running"
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+        except psutil.NoSuchProcess:
+            return "Stopped"
+        except Exception as e:
+            self.log(f"Error checking status for {name}: {e}", level="error")
+            return "Error"
+        
+        return "Stopped"
 
     def _mark_server_as_stable(self, name):
         """서버가 안정적으로 유지되면 재시작 횟수를 재설정하기 위해 타이머에 의해 호출됩니다."""
@@ -1231,7 +1239,7 @@ class ConfigWindow(ctk.CTkToplevel):
                     options=[_("OK"), _("Cancel")]
                 )
                 response = msg.get()
-                if response == _("OK"): 
+                if response == _("OK"):
                     entry_widget.delete(0, ctk.END)
                     entry_widget.insert(0, found_service.name())
                     self.master.log(f"Set MySQL service to '{found_service.name()}'")
@@ -1476,7 +1484,6 @@ class ConfigWindow(ctk.CTkToplevel):
 
             self.destroy()
 
-
 def is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
@@ -1494,7 +1501,7 @@ if __name__ == "__main__":
 
     # --- 중복 실행 방지 ---
     # 고유한 뮤텍스 이름을 지정합니다.
-    mutex_name = "Global\AzeCoreServerLauncher-Mutex-20240521"
+    mutex_name = r"Global\AzeCoreServerLauncher-Mutex-20240521"
     ERROR_ALREADY_EXISTS = 183
 
     # 뮤텍스를 생성합니다.
@@ -1531,7 +1538,7 @@ if __name__ == "__main__":
             root.withdraw() # 빈 루트 창 숨기기
             messagebox.showerror(
                 "Critical Error",
-                f"A critical error occurred and the launcher must close.\n\n" 
+                f"A critical error occurred and the launcher must close.\n\n"
                 f"Please check the 'server_launcher.log' file for details.\n\n"
                 f"Error: {e}"
             )
@@ -1541,4 +1548,3 @@ if __name__ == "__main__":
         # 애플리케이션 종료 시 뮤텍스 핸들을 해제합니다.
         if mutex_handle:
             ctypes.windll.kernel32.CloseHandle(mutex_handle)
-
