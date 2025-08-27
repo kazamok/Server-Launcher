@@ -102,13 +102,13 @@ TRANSLATIONS = {
     "The following configuration errors occurred:\n\n": "다음 설정 오류가 발생했습니다:\n\n",
     "Process Name for {} cannot be empty.": "{}의 프로세스 이름은 비워둘 수 없습니다.",
     "Start Command for {} cannot be empty.": "{}의 시작 명령어는 비워둘 수 없습니다.",
-    "Start Command path for {} does not exist:{}:": "{}의 시작 명령어 경로가 존재하지 않습니다:{}:",
+    "Start Command path for {} does not exist:{{}}:": "{}의 시작 명령어 경로가 존재하지 않습니다:{{}}:",
     "Service Name for {} cannot be empty.": "{}의 서비스 이름은 비워둘 수 없습니다.",
     # MySQL 관련
     "Find Service": "서비스 찾기",
     "MySQL Service Detection": "MySQL 서비스 감지",
     "Could not find a running MySQL service.": "실행 중인 MySQL 서비스를 찾을 수 없습니다.",
-    "Found service: {}. Use this?": "서비스를 찾았습니다: {}. 사용하시겠습니까?",
+    "Found service: {{}}. Use this?": "서비스를 찾았습니다: {{}}. 사용하시겠습니까?",
     "If you run MySQL from a folder (e.g., XAMPP), choose 'process'.": "만약 폴더(예: XAMPP)에서 MySQL을 실행한다면 '프로세서'를 선택하세요.",
     "If MySQL is installed and runs on boot, choose 'service'.": "MySQL이 설치되어 부팅 시 자동 실행된다면 '서비스'를 선택하세요.",
     "Edit Config File": "설정 파일 열기",
@@ -132,6 +132,7 @@ TRANSLATIONS = {
     "Open Download Page": "다운로드 페이지 열기",
     "Notepad++ could not be found. What would you like to do?": "Notepad++를 찾을 수 없습니다. 무엇을 하시겠습니까?",
     "Stopped by internal CTRL-C signal": "내부 CTRL-C 신호로 정지",
+    "Discord Webhook URL:": "디스코드 웹훅 URL:",
 }
 
 # --- 번역 함수 ---
@@ -216,7 +217,8 @@ def load_config():
             "auto_restart": False
         },
         "auto_restart_enabled": False,
-        "editor_path": "notepad++.exe"
+        "editor_path": "notepad++.exe",
+        "discord_webhook_url": ""
     }
 
     try:
@@ -234,6 +236,8 @@ def load_config():
                 loaded_config["auto_restart_enabled"] = default_config["auto_restart_enabled"]
             if "editor_path" not in loaded_config:
                 loaded_config["editor_path"] = default_config["editor_path"]
+            if "discord_webhook_url" not in loaded_config:
+                loaded_config["discord_webhook_url"] = default_config["discord_webhook_url"]
             logging.info(f"Configuration loaded from {CONFIG_FILE}")
             return loaded_config
 
@@ -1066,6 +1070,12 @@ class ConfigWindow(ctk.CTkToplevel):
         self.editor_path_entry.insert(0, self.temp_config.get("editor_path", "")) # Initialize with current editor path
         self.editor_path_entry.grid(row=1, column=0, sticky="ew", pady=5) # Entry in row 1, column 0, expands horizontally
 
+        # --- Discord Webhook URL ---
+        ctk.CTkLabel(editor_frame, text=_("Discord Webhook URL:"), font=ctk.CTkFont(family="맑은 고딕", size=12)).grid(row=2, column=0, sticky="w", pady=(10, 0))
+        self.discord_webhook_entry = ctk.CTkEntry(editor_frame, font=ctk.CTkFont(family="맑은 고딕", size=12), width=300)
+        self.discord_webhook_entry.insert(0, self.temp_config.get("discord_webhook_url", ""))
+        self.discord_webhook_entry.grid(row=3, column=0, sticky="ew", pady=5)
+
 
         # --- 오른쪽: 세부 정보 패널 ---
         self.details_frame = ctk.CTkFrame(container)
@@ -1281,13 +1291,13 @@ class ConfigWindow(ctk.CTkToplevel):
                         self.master.log("User chose to open Notepad++ download page.")
                 else:
                     self.master.log(f"Editor executable not found at: {editor_path}", level="error")
-                    CTkMessagebox(title=_("Error"), message=f"{_('Editor not found:')}\n{editor_path}", icon="cancel")
+                    CTkMessagebox(title=_("Error"), message=f"{_('Editor not found:')}{editor_path}", icon="cancel")
             except Exception as e:
                 self.master.log(f"Failed to open config file {config_path} with {editor_path}: {e}", level="error")
                 CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
         else:
             self.master.log(f"Config file not found for {server_name} at path: {config_path}", level="warning")
-            CTkMessagebox(title=_("Error"), message=f"{_('Config file not found:')}\n{config_path}", icon="cancel")
+            CTkMessagebox(title=_("Error"), message=f"{_('Config file not found:')}{config_path}", icon="cancel")
 
     def _browse_path(self, entry_widget, server_name):
         initial_dir = os.path.dirname(entry_widget.get()) if os.path.exists(entry_widget.get()) else os.getcwd()
@@ -1442,21 +1452,24 @@ class ConfigWindow(ctk.CTkToplevel):
         if self.selected_server_name:
             self._update_temp_config_from_ui(self.selected_server_name)
 
+        # UI에서 전역 설정 업데이트 (검증 전에 수행)
+        self.temp_config["editor_path"] = self.editor_path_entry.get()
+        self.temp_config["discord_webhook_url"] = self.discord_webhook_entry.get()
+
         errors = []
         for name, config in self.temp_config.items():
-            if name in ["auto_restart_enabled", "editor_path"]: continue
+            # 서버 항목이 아닌 전역 설정 항목은 건너뜀
+            if name in ["auto_restart_enabled", "editor_path", "discord_webhook_url"]:
+                continue
             
             if config['type'] == 'process':
                 start_cmd = config.get("start_cmd", [""])[0]
                 if not config.get("process_name"): errors.append(_("Process Name for {}" ).format(name))
                 if not start_cmd: errors.append(_("Start Command for {}" ).format(name))
-                elif not os.path.exists(start_cmd): errors.append(_("Start Command path for {} does not exist:\n{}" ).format(name, start_cmd))
+                elif not os.path.exists(start_cmd): errors.append(_("Start Command path for {} does not exist:{{}}:").format(name, start_cmd))
             
             elif config['type'] == 'service':
                 if not config.get("service_name"): errors.append(_("Service Name for {}" ).format(name))
-
-        # UI에서 전역 설정 업데이트
-        self.temp_config["editor_path"] = self.editor_path_entry.get()
 
         if errors:
             error_message = _("The following configuration errors occurred:\n\n") + "\n\n".join(errors)
@@ -1473,7 +1486,8 @@ class ConfigWindow(ctk.CTkToplevel):
             self._update_server_list_indicators()
             
             for name, config in SERVER_CONFIG.items():
-                if name in ["auto_restart_enabled", "editor_path"]: continue
+                if name in ["auto_restart_enabled", "editor_path", "discord_webhook_url"]:
+                    continue
                 if name in self.master.server_widgets and "path_label" in self.master.server_widgets[name]:
                     path_text = ""
                     if config["type"] == "process" and config.get("start_cmd"):
