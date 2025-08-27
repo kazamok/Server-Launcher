@@ -170,7 +170,7 @@ def load_config():
             "process_name": "httpd.exe",
             "start_cmd": [r"C:\WISE\xampp\apache_start.bat"],
             "cwd": r"C:\WISE\xampp",
-            "show_console": False,
+            "show_console": True,
             "auto_restart": False
         },
         "Backend": {
@@ -179,7 +179,7 @@ def load_config():
             "port": 5000,
             "start_cmd": [r"C:\WISE\Account-manager\start_backend.bat"],
             "cwd": r"C:\WISE\Account-manager",
-            "show_console": False,
+            "show_console": True,
             "auto_restart": False
         },
         "Frontend": {
@@ -188,7 +188,7 @@ def load_config():
             "port": 3000,
             "start_cmd": [r"C:\WISE\Account-manager\start_frontend.bat"],
             "cwd": r"C:\WISE\Account-manager",
-            "show_console": False,
+            "show_console": True,
             "auto_restart": False
         },
         "Auth Server": {
@@ -283,6 +283,7 @@ class ServerLauncher(ctk.CTk):
         self.checkboxes = {} # 체크박스 위젯 저장
         self.select_all_var = ctk.BooleanVar() # '전체 선택' 체크박스 변수
         self.shutdown_event = threading.Event() # 종료 신호
+        self.config_window = None # 설정창 인스턴스
 
         # --- 자동 재시작 관련 변수 ---
         self.intended_stops = set() # 사용자가 의도적으로 중지한 서버 목록
@@ -347,8 +348,12 @@ class ServerLauncher(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_quit_button_click)
 
     def open_config_window(self):
-        config_window = ConfigWindow(self)
-        config_window.grab_set()
+        if self.config_window is None or not self.config_window.winfo_exists():
+            self.config_window = ConfigWindow(self)
+            self.config_window.grab_set()
+        else:
+            self.config_window.lift()
+            self.config_window.focus_force()
 
     def create_server_row(self, parent, name, row):
         config = SERVER_CONFIG[name]
@@ -480,12 +485,13 @@ class ServerLauncher(ctk.CTk):
                 show_console = config.get("show_console", False)
                 
                 creationflags = 0
-                if use_shell or show_console:
-                    # For console apps we want to be able to send CTRL+C, so they need a new process group.
-                    # This applies to Auth Server and World Server.
-                    if name in ["Auth Server", "World Server"]:
-                        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-                else:
+                # Auth/World 서버는 Ctrl-C 처리를 위해 특별한 플래그가 필요합니다.
+                if name == "World Server":
+                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+                elif name == "Auth Server":
+                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NEW_CONSOLE
+                # 다른 모든 프로세스는 "콘솔 보이기" 체크박스 상태를 따릅니다.
+                elif not show_console:
                     creationflags = subprocess.CREATE_NO_WINDOW
 
                 proc = subprocess.Popen(
@@ -1112,10 +1118,15 @@ class ConfigWindow(ctk.CTkToplevel):
                     break # 윈도우서비스 중 유력한 프로세스 후보를 찾았고, 선택
             
             if found_service:
-                msg = CTkMessagebox(title=_("MySQL Service Detection"), 
-                                    message=_("Found service: {}. Use this?").format(found_service.name()),
-                                    icon="question", option_1=_("Cancel"), option_2=_("OK"))
-                if msg.get() == "OK":
+                msg = CustomMessageBox(
+                    master=self,
+                    title=_("MySQL Service Detection"),
+                    message=_("Found service: {}. Use this?").format(found_service.name()),
+                    font=ctk.CTkFont(family="맑은 고딕", size=12),
+                    options=[_("OK"), _("Cancel")]
+                )
+                response = msg.get()
+                if response == _("OK"): 
                     entry_widget.delete(0, ctk.END)
                     entry_widget.insert(0, found_service.name())
                     self.master.log(f"Set MySQL service to '{found_service.name()}'")
@@ -1144,13 +1155,15 @@ class ConfigWindow(ctk.CTkToplevel):
                 self.master.log(f"Opening config file for {server_name} with {editor_path}: {config_path}")
             except FileNotFoundError:
                 if "notepad++.exe" in editor_path.lower():
-                    msg = CTkMessagebox(
+                    msg = CustomMessageBox(
+                        master=self,
                         title=_("Notepad++ Not Found"), 
                         message=_("Notepad++ could not be found. Would you like to open the download page?"),
-                        icon="question", 
-                        option_1=_("No"), 
-                        option_2=_("Open Download Page"))
-                    if msg.get() == _("Open Download Page"):
+                        font=ctk.CTkFont(family="맑은 고딕", size=12),
+                        options=[_("Open Download Page"), _("No")]
+                    )
+                    response = msg.get()
+                    if response == _("Open Download Page"):
                         webbrowser.open("https://notepad-plus-plus.org/downloads/")
                         self.master.log("User chose to open Notepad++ download page.")
                 else:
@@ -1369,26 +1382,58 @@ def run_as_admin():
     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
 
 if __name__ == "__main__":
-    if is_admin():
-        try:
-            app = ServerLauncher()
-            app.mainloop()
-        except Exception as e:
-            logging.error("An unhandled exception occurred which caused the application to close.")
-            logging.error(traceback.format_exc())
-            # 앱이 보이지 않을 가능성이 높으므로 사용자에게 메시지 상자를 표시하려고 시도합니다.
-            try:
-                import tkinter as tk
-                from tkinter import messagebox
-                root = tk.Tk()
-                root.withdraw() # 빈 루트 창 숨기기
-                messagebox.showerror(
-                    "Critical Error",
-                    f"A critical error occurred and the launcher must close.\n\n"
-                    f"Please check the 'server_launcher.log' file for details.\n\n"
-                    f"Error: {e}"
-                )
-            except Exception as mb_e:
-                logging.error(f"Failed to show fallback error message box: {mb_e}")
-    else:
+    # 관리자 권한으로 실행되지 않았다면, 관리자 권한으로 다시 실행합니다.
+    if not is_admin():
         run_as_admin()
+        sys.exit(0)
+
+    # --- 중복 실행 방지 ---
+    # 고유한 뮤텍스 이름을 지정합니다.
+    mutex_name = "Global\AzeCoreServerLauncher-Mutex-20240521"
+    ERROR_ALREADY_EXISTS = 183
+
+    # 뮤텍스를 생성합니다.
+    mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
+
+    # 뮤텍스가 이미 존재하는지 확인합니다.
+    if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        # 이미 인스턴스가 실행 중입니다.
+        if mutex_handle:
+            ctypes.windll.kernel32.CloseHandle(mutex_handle)
+        
+        # 기존 창을 찾아 활성화합니다.
+        hwnd = ctypes.windll.user32.FindWindowW(None, _("Server Launcher"))
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        else:
+            # 만약 창을 찾지 못하면, 사용자에게 메시지를 표시합니다.
+            ctypes.windll.user32.MessageBoxW(0, "아제로스코어 런처가 이미 실행 중입니다.", _("Server Launcher"), 0x40) # MB_OK | MB_ICONINFORMATION
+        sys.exit(0) # 현재 인스턴스를 종료합니다.
+
+    # --- 메인 애플리케이션 실행 ---
+    try:
+        app = ServerLauncher()
+        app.mainloop()
+    except Exception as e:
+        logging.error("An unhandled exception occurred which caused the application to close.")
+        logging.error(traceback.format_exc())
+        # 앱이 보이지 않을 가능성이 높으므로 사용자에게 메시지 상자를 표시하려고 시도합니다.
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw() # 빈 루트 창 숨기기
+            messagebox.showerror(
+                "Critical Error",
+                f"A critical error occurred and the launcher must close.\n\n"
+                f"Please check the 'server_launcher.log' file for details.\n\n"
+                f"Error: {e}"
+            )
+        except Exception as mb_e:
+            logging.error(f"Failed to show fallback error message box: {mb_e}")
+    finally:
+        # 애플리케이션 종료 시 뮤텍스 핸들을 해제합니다.
+        if mutex_handle:
+            ctypes.windll.kernel32.CloseHandle(mutex_handle)
+
