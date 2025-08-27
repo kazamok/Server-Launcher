@@ -896,7 +896,7 @@ class ConfigWindow(ctk.CTkToplevel):
         # 메인 컨테이너 프레임
         container = ctk.CTkFrame(self)
         container.pack(pady=20, padx=20, fill="both", expand=True)
-        container.grid_columnconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=0) # 왼쪽 패널은 크기 고정
         container.grid_columnconfigure(1, weight=3)
         container.grid_rowconfigure(0, weight=1)
         container.grid_rowconfigure(1, weight=0) # Added for bottom frame
@@ -1297,7 +1297,7 @@ class ConfigWindow(ctk.CTkToplevel):
         elif config_data["type"] == "service":
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
             row_frame.pack(fill="x", padx=10, pady=2)
-            ctk.CTkLabel(row_frame, text=_("Service Name:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=100, anchor="w").pack(side="left")
+            ctk.CTkLabel(row_frame, text=_("Service Name:"), font=ctk.CTkFont(family="맑은 고딕", size=12), width=120, anchor="w").pack(side="left")
             service_name_entry = ctk.CTkEntry(row_frame, width=200, font=ctk.CTkFont(family="맑은 고딕", size=12))
             service_name_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
             service_name_entry.insert(0, config_data.get("service_name", ""))
