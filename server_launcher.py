@@ -114,6 +114,10 @@ TRANSLATIONS = {
     "Config file not found:": "설정 파일을 찾을 수 없습니다:",
     "Quit Launcher?": "런처 종료?",
     "Are you sure you want to quit?\nRunning servers will not be affected.": "정말로 종료하시겠습니까?\n실행 중인 서버는 종료되지 않습니다.",
+    # 종료 옵션
+    "Stop All & Quit": "서버 정지 후 종료",
+    "Just Quit Launcher": "런처만 종료",
+    "One or more servers are currently running.": "하나 이상의 서버가 현재 실행 중입니다.",
     # 에디터 설정
     "Editor": "에디터",
     "Select Editor Executable": "에디터 실행 파일 선택",
@@ -644,13 +648,13 @@ class ServerLauncher(ctk.CTk):
             if SERVER_CONFIG[name]["type"] == "service":
                 self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
                 self.start_server(name)
-                self._wait_for_status_change(name, _("Running"))
+                self._wait_for_status_change(name, "Running")
         # 그 다음 프로세스
         for name in servers_to_start:
             if SERVER_CONFIG[name]["type"] == "process":
                 self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
                 self.start_server(name)
-                self._wait_for_status_change(name, _("Running"))
+                self._wait_for_status_change(name, "Running")
         self.log("All targeted server start commands issued.")
 
     def stop_all_servers(self):
@@ -681,13 +685,13 @@ class ServerLauncher(ctk.CTk):
             if SERVER_CONFIG[name]["type"] == "process":
                 self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
                 self.stop_server(name)
-                self._wait_for_status_change(name, _("Stopped"))
+                self._wait_for_status_change(name, "Stopped")
         # 그 다음 서비스
         for name in reversed(servers_to_stop):
             if SERVER_CONFIG[name]["type"] == "service":
                 self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
                 self.stop_server(name)
-                self._wait_for_status_change(name, _("Stopped"))
+                self._wait_for_status_change(name, "Stopped")
         self.log("All targeted server stop commands issued.")
 
     def _enable_all_buttons(self):
@@ -807,21 +811,94 @@ class ServerLauncher(ctk.CTk):
             del self.server_stable_timers[name]
 
     def on_quit_button_click(self):
+        # 실행 중인 서버가 있는지 확인
+        running_servers = [name for name, config in SERVER_CONFIG.items() 
+                           if isinstance(config, dict) and self.check_server_status(name) == "Running"]
+
+        # 실행 중인 서버가 없을 경우, 간단한 종료 확인
+        if not running_servers:
+            msg = CustomMessageBox(
+                master=self,
+                title=_("Quit Launcher?"),
+                message=_("Are you sure you want to quit?"),
+                font=ctk.CTkFont(family="맑은 고딕", size=12),
+                options=[_("No"), _("Yes")]
+            )
+            response = msg.get()
+            if response == _("Yes"):
+                self.perform_shutdown()
+            else:
+                self.log("User cancelled quit.")
+            return
+
+        # 실행 중인 서버가 있을 경우, 상세 옵션 제공
         msg = CustomMessageBox(
-            master=self, # Pass self as master
+            master=self,
             title=_("Quit Launcher?"),
-            message=_("Are you sure you want to quit?\nRunning servers will not be affected."),
+            message=_("One or more servers are currently running."),
             font=ctk.CTkFont(family="맑은 고딕", size=12),
-            options=[_("No"), _("Yes")]
+            options=[_("Stop All & Quit"), _("Just Quit Launcher"), _("Cancel")]
         )
         response = msg.get()
-        if response == _("Yes"):
-            self.log("User confirmed quit. Exiting launcher.")
-            self.shutdown_event.set()
-            self.monitor_thread.join(timeout=6) # 모니터링 스레드가 깔끔하게 종료될 때까지 기다립니다.
-            self.destroy()
-        else:
+
+        if response == _("Stop All & Quit"):
+            self.log("User chose to stop all servers and quit. Initiating shutdown...")
+            self.stop_all_and_shutdown(running_servers)
+        elif response == _("Just Quit Launcher"):
+            self.log("User chose to quit launcher only. Servers will remain running.")
+            self.perform_shutdown()
+        else: # Cancel or window closed
             self.log("User cancelled quit.")
+
+    def stop_all_and_shutdown(self, servers_to_stop):
+        # UI를 비활성화하여 추가 상호작용 방지
+        self.start_all_button.configure(state="disabled")
+        self.stop_all_button.configure(state="disabled")
+        for widgets in self.server_widgets.values():
+            widgets['start'].configure(state="disabled")
+            widgets['stop'].configure(state="disabled")
+        
+        self.log(f"Stopping the following servers: {', '.join(servers_to_stop)}")
+
+        # 모든 서버를 중지하는 작업을 별도의 스레드에서 실행하여 UI가 멈추지 않도록 함
+        shutdown_thread = threading.Thread(target=self._shutdown_worker, args=(servers_to_stop,), daemon=True)
+        shutdown_thread.start()
+
+    def _shutdown_worker(self, servers_to_stop):
+        # _stop_all_worker와 유사하지만, 완료 후 애플리케이션 종료를 트리거
+        self.log(f"Shutdown worker started. Attempting to stop: {', '.join(servers_to_stop)}")
+        
+        # 프로세스를 먼저 중지 (의존성 역순)
+        process_servers = [name for name in servers_to_stop if SERVER_CONFIG[name]["type"] == "process"]
+        # 일반적인 종료 순서를 위해 서버 목록을 뒤집음
+        for name in reversed(process_servers):
+            self.log(f"Shutting down process: {name}")
+            self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
+            self.stop_server(name)
+            # 상태가 'Stopped'으로 변경될 때까지 기다림 (더 긴 타임아웃)
+            self._wait_for_status_change(name, "Stopped", timeout=15)
+
+        # 그 다음 서비스 중지
+        service_servers = [name for name in servers_to_stop if SERVER_CONFIG[name]["type"] == "service"]
+        for name in reversed(service_servers):
+            self.log(f"Shutting down service: {name}")
+            self.server_widgets[name]["status"].configure(text=_("Progressing..."), text_color="orange")
+            self.stop_server(name)
+            self._wait_for_status_change(name, "Stopped", timeout=15)
+
+        self.log("All server stop commands issued. Proceeding with application exit.")
+        
+        # 모든 중지 작업이 완료된 후 메인 스레드에서 종료를 수행하도록 스케줄
+        self.after(0, self.perform_shutdown)
+
+    def perform_shutdown(self):
+        """ 최종 종료 시퀀스를 수행합니다. """
+        self.log("Performing final shutdown.")
+        self.shutdown_event.set()
+        # 모니터 스레드가 종료될 시간을 줌
+        if self.monitor_thread.is_alive():
+            self.monitor_thread.join(timeout=1.0) 
+        self.destroy()
 
 class CustomMessageBox(ctk.CTkToplevel):
     def __init__(self, master, title, message, font, options: list[str]): # Added master, changed options
@@ -841,7 +918,7 @@ class CustomMessageBox(ctk.CTkToplevel):
         parent_y = parent.winfo_y()
         parent_width = parent.winfo_width()
         parent_height = parent.winfo_height()
-        self_width = 400
+        self_width = 550
         self_height = 150
         pos_x = parent_x + (parent_width // 2) - (self_width // 2)
         pos_y = parent_y + (parent_height // 2) - (self_height // 2)
@@ -859,7 +936,7 @@ class CustomMessageBox(ctk.CTkToplevel):
         button_frame.pack(pady=10)
 
         for i, option_text in enumerate(options):
-            btn = ctk.CTkButton(button_frame, text=option_text, font=font, width=100, command=lambda opt=option_text: self._button_click(opt))
+            btn = ctk.CTkButton(button_frame, text=option_text, font=font, width=150, command=lambda opt=option_text: self._button_click(opt))
             btn.pack(side="left", padx=10) # Pack all buttons to the left
 
     def _button_click(self, response):
