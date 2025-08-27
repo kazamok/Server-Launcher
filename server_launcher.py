@@ -113,6 +113,7 @@ TRANSLATIONS = {
     "Edit Config File": "설정 파일 열기",
     "Config file not found:": "설정 파일을 찾을 수 없습니다:",
     "Quit Launcher?": "런처 종료?",
+    "Are you sure you want to quit?": "정말로 종료하시겠습니까?",
     "Are you sure you want to quit?\nRunning servers will not be affected.": "정말로 종료하시겠습니까?\n실행 중인 서버는 종료되지 않습니다.",
     # 종료 옵션
     "Stop All & Quit": "서버 정지 후 종료",
@@ -1019,7 +1020,7 @@ class ConfigWindow(ctk.CTkToplevel):
         editor_frame.grid(row=1, column=0, sticky="ew", padx=(5,10), pady=(10,0))
         editor_frame.grid_columnconfigure(0, weight=1) # Single column that expands
 
-        browse_editor_button = ctk.CTkButton(editor_frame, text=_("Editor Button"), width=70, height=25, font=ctk.CTkFont(family="맑은 고딕", size=12),
+        browse_editor_button = ctk.CTkButton(editor_frame, text=_("Editor Button"), width=90, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12),
                                              command=self._handle_editor_button_click, corner_radius=0)
         browse_editor_button.grid(row=0, column=0, padx=(0,0), pady=5, sticky="w") # Button in row 0, column 0
 
