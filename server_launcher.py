@@ -75,6 +75,7 @@ TRANSLATIONS = {
     "Executable/Service Path": "실행 파일/서비스 경로",
     "Browse": "찾아보기",
     "Editor Button": "편집기",
+    "Select Editor": "편집기 선택",
     "N/A (Service)": "해당 없음 (서비스)",
     "Auto Restart Enabled": "자동 재시작 활성화",
     "Save All Configs": "모든 설정 저장",
@@ -127,6 +128,10 @@ TRANSLATIONS = {
     "Editor path is not configured.": "에디터 경로가 설정되지 않았습니다.",
     "Yes": "예",
     "No": "아니오",
+    "Unsaved Changes": "저장되지 않은 변경 사항",
+    "You have unsaved changes. What would you like to do?": "저장되지 않은 변경 사항이 있습니다. 어떻게 하시겠습니까?",
+    "Discard Changes": "변경 사항 버리기",
+    "Save Changes": "변경 사항 저장",
     "Notepad++ Not Found": "Notepad++ 찾을 수 없음",
     "Notepad++ could not be found. Would you like to open the download page?": "Notepad++를 찾을 수 없습니다. 다운로드 페이지를 여시겠습니까?",
     "Open Download Page": "다운로드 페이지 열기",
@@ -1001,11 +1006,13 @@ class ConfigWindow(ctk.CTkToplevel):
         self.geometry("950x600")
         self.minsize(950, 600)
         self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self._on_closing_config_window)
 
         self.selected_server_name = None
         self.server_config_widgets = {}
         self.highlight_color = "#107C41"  # 선택 및 호버를 위한 녹색
         self.modified_servers = set()
+        self.editor_path_modified = False
 
         # 변경 사항을 스테이징하기 위해 설정의 임시 사본 만들기
         self.temp_config = copy.deepcopy(SERVER_CONFIG)
@@ -1062,19 +1069,21 @@ class ConfigWindow(ctk.CTkToplevel):
         editor_frame.grid(row=1, column=0, sticky="ew", padx=(5,10), pady=(10,0))
         editor_frame.grid_columnconfigure(0, weight=1) # Single column that expands
 
-        browse_editor_button = ctk.CTkButton(editor_frame, text=_("Editor Button"), width=90, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12),
+        self.browse_editor_button = ctk.CTkButton(editor_frame, text=_("Select Editor"), width=90, height=30, font=ctk.CTkFont(family="맑은 고딕", size=12),
                                              command=self._handle_editor_button_click, corner_radius=0)
-        browse_editor_button.grid(row=0, column=0, padx=(0,0), pady=5, sticky="w") # Button in row 0, column 0
+        self.browse_editor_button.grid(row=0, column=0, padx=(0,0), pady=5, sticky="w") # Button in row 0, column 0
 
         self.editor_path_entry = ctk.CTkEntry(editor_frame, font=ctk.CTkFont(family="맑은 고딕", size=12), width=300)
         self.editor_path_entry.insert(0, self.temp_config.get("editor_path", "")) # Initialize with current editor path
         self.editor_path_entry.grid(row=1, column=0, sticky="ew", pady=5) # Entry in row 1, column 0, expands horizontally
+        self.editor_path_entry.bind("<KeyRelease>", lambda event: self._mark_editor_path_modified())
 
         # --- Discord Webhook URL ---
         ctk.CTkLabel(editor_frame, text=_("Discord Webhook URL:"), font=ctk.CTkFont(family="맑은 고딕", size=12)).grid(row=2, column=0, sticky="w", pady=(10, 0))
         self.discord_webhook_entry = ctk.CTkEntry(editor_frame, font=ctk.CTkFont(family="맑은 고딕", size=12), width=300)
         self.discord_webhook_entry.insert(0, self.temp_config.get("discord_webhook_url", ""))
         self.discord_webhook_entry.grid(row=3, column=0, sticky="ew", pady=5)
+        self.discord_webhook_entry.bind("<KeyRelease>", lambda event: self._mark_editor_path_modified())
 
 
         # --- 오른쪽: 세부 정보 패널 ---
@@ -1094,8 +1103,32 @@ class ConfigWindow(ctk.CTkToplevel):
         save_button = ctk.CTkButton(button_frame, text=_("Save All Configs"), command=self._save_all_configs, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         save_button.pack(side="right", padx=10)
 
-        cancel_button = ctk.CTkButton(button_frame, text=_("Cancel"), command=self.destroy, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
+        cancel_button = ctk.CTkButton(button_frame, text=_("Cancel"), command=self._on_closing_config_window, font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold"), corner_radius=0)
         cancel_button.pack(side="right", padx=5)
+
+    def _on_closing_config_window(self):
+        self.master.log(f"Closing ConfigWindow. Modified servers: {self.modified_servers}, Editor path modified: {self.editor_path_modified}", level="info")
+        # Check for unsaved changes
+        if self.modified_servers or self.editor_path_modified:
+            msg = CustomMessageBox(
+                master=self,
+                title=_("Unsaved Changes"),
+                message=_("You have unsaved changes. What would you like to do?"),
+                font=ctk.CTkFont(family="맑은 고딕", size=12),
+                options=[_("Discard Changes"), _("Save Changes"), _("Cancel")]
+            )
+            response = msg.get()
+            self.master.log(f"CustomMessageBox response: {response}", level="info")
+
+            if response == _("Discard Changes"):
+                self.destroy()
+            elif response == _("Save Changes"):
+                self._save_all_configs()
+            # If response is "Cancel" or dialog is closed, do nothing.
+        else:
+            # No unsaved changes, just close
+            self.master.log("No unsaved changes. Closing ConfigWindow.", level="info")
+            self.destroy()
 
     def _find_notepadpp_path(self):
         # Common installation paths for Notepad++
@@ -1121,46 +1154,39 @@ class ConfigWindow(ctk.CTkToplevel):
             # 이것은 모두와 함께 저장되는 전역 설정이므로 _mark_as_modified를 호출할 필요가 없습니다.
 
     def _handle_editor_button_click(self):
-        notepad_path = self._find_notepadpp_path()
-        if notepad_path:
-            self.editor_path_entry.delete(0, ctk.END)
-            self.editor_path_entry.insert(0, notepad_path)
-            self.master.log(f"Notepad++ found and path set: {notepad_path}")
-        else:
-            # Notepad++ not found, show popup
-            msg = CustomMessageBox(
-                master=self, # Pass self as master
-                title=_("Notepad++ Not Found"),
-                message=_("Notepad++ could not be found. What would you like to do?"),
-                font=ctk.CTkFont(family="맑은 고딕", size=12),
-                options=[_("Browse"), _("Open Download Page"), _("Cancel")] # New options
-            )
-            response = msg.get()
-            if response == _("Browse"):
-                self._open_file_dialog_for_editor()
-            elif response == _("Open Download Page"):
-                webbrowser.open("https://notepad-plus-plus.org/downloads/")
-                self.master.log("User chose to open Notepad++ download page.")
-            else:
-                self.master.log("User cancelled editor path selection.")
+        self._open_file_dialog_for_editor()
         # Ensure ConfigWindow regains focus after any external interaction
         self.lift()
         self.focus_force()
 
     def _mark_as_modified(self, server_name, *args):
         """서버를 수정된 것으로 표시하고 버튼 텍스트를 업데이트합니다."""
+        self.master.log(f"Marking server '{server_name}' as modified.", level="info") # Added log
         if server_name not in self.modified_servers:
             self.modified_servers.add(server_name)
-            self._update_server_list_indicators()
+            self._update_modified_indicators()
 
-    def _update_server_list_indicators(self):
-        """수정된 서버에 대해 '*'를 표시하도록 서버 목록 버튼을 업데이트합니다."""
+    def _mark_editor_path_modified(self):
+        self.master.log("Marking editor path as modified.", level="info") # Added log
+        if not self.editor_path_modified:
+            self.editor_path_modified = True
+            self._update_modified_indicators()
+
+    def _update_modified_indicators(self):
+        """Updates server list buttons and editor button to show '*' for modified items."""
+        # Update server buttons
         for name, widgets in self.server_config_widgets.items():
             button = widgets["select_button"]
             if name in self.modified_servers:
                 button.configure(text=f"{name} *")
             else:
                 button.configure(text=name)
+
+        # Update editor button
+        if self.editor_path_modified:
+            self.browse_editor_button.configure(text=_("Select Editor") + " *")
+        else:
+            self.browse_editor_button.configure(text=_("Select Editor"))
 
     def _update_temp_config_from_ui(self, server_name):
         """UI 위젯에서 값을 읽어 temp_config 사전에 저장합니다."""
@@ -1264,40 +1290,71 @@ class ConfigWindow(ctk.CTkToplevel):
 
     def _open_config_file(self, server_name):
         config_path = self.temp_config.get(server_name, {}).get("config_path")
-        editor_path = self.temp_config.get("editor_path", "notepad++.exe") # temp_config에서 편집기 가져오기
+        editor_path = self.temp_config.get("editor_path", "notepad++.exe")
 
         if not editor_path:
             self.master.log("Editor path is not configured.", level="error")
             CTkMessagebox(title=_("Error"), message=_("Editor path is not configured."), icon="cancel")
             return
 
-        if config_path and os.path.exists(config_path):
-            try:
-                # subprocess.Popen을 사용하여 파일과 함께 편집기 실행
-                subprocess.Popen([editor_path, config_path])
-                self.master.log(f"Opening config file for {server_name} with {editor_path}: {config_path}")
-            except FileNotFoundError:
-                if "notepad++.exe" in editor_path.lower():
-                    msg = CustomMessageBox(
-                        master=self,
-                        title=_("Notepad++ Not Found"), 
-                        message=_("Notepad++ could not be found. Would you like to open the download page?"),
-                        font=ctk.CTkFont(family="맑은 고딕", size=12),
-                        options=[_("Open Download Page"), _("No")]
-                    )
-                    response = msg.get()
-                    if response == _("Open Download Page"):
-                        webbrowser.open("https://notepad-plus-plus.org/downloads/")
-                        self.master.log("User chose to open Notepad++ download page.")
-                else:
-                    self.master.log(f"Editor executable not found at: {editor_path}", level="error")
-                    CTkMessagebox(title=_("Error"), message=f"{_('Editor not found:')}{editor_path}", icon="cancel")
-            except Exception as e:
-                self.master.log(f"Failed to open config file {config_path} with {editor_path}: {e}", level="error")
-                CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
-        else:
+        if not (config_path and os.path.exists(config_path)):
             self.master.log(f"Config file not found for {server_name} at path: {config_path}", level="warning")
             CTkMessagebox(title=_("Error"), message=f"{_('Config file not found:')}{config_path}", icon="cancel")
+            return
+
+        try:
+            # First, try to execute with the given editor_path
+            subprocess.Popen([editor_path, config_path])
+            self.master.log(f"Opening config file for {server_name} with {editor_path}: {config_path}")
+        except FileNotFoundError:
+            # If it fails, and it's notepad++, try to find it automatically
+            if "notepad++.exe" in editor_path.lower():
+                self.master.log(f"'{editor_path}' not found directly. Searching for Notepad++.", level="info")
+                notepad_full_path = self._find_notepadpp_path()
+                
+                if notepad_full_path:
+                    self.master.log(f"Found Notepad++ at '{notepad_full_path}'. Retrying and updating config.")
+                    # Update the config and UI entry for future use
+                    self.temp_config["editor_path"] = notepad_full_path
+                    self.editor_path_entry.delete(0, ctk.END)
+                    self.editor_path_entry.insert(0, notepad_full_path)
+                    
+                    # ADD THIS LINE:
+                    self._mark_editor_path_modified() # Explicitly mark as modified
+                    
+                    try:
+                        # Retry with the full path
+                        subprocess.Popen([notepad_full_path, config_path])
+                        return # Success!
+                    except Exception as e_retry:
+                        self.master.log(f"Failed to open with found path '{notepad_full_path}': {e_retry}", level="error")
+                        # Fall through to show the generic error
+                else:
+                    # If still not found, ask the user what to do
+                    self.master.log("Notepad++ not found in common locations.", level="warning")
+                    msg = CustomMessageBox(
+                        master=self,
+                        title=_("Notepad++ Not Found"),
+                        message=_("Notepad++ could not be found. What would you like to do?"),
+                        font=ctk.CTkFont(family="맑은 고딕", size=12),
+                        options=[_("Browse"), _("Open Download Page"), _("Cancel")]
+                    )
+                    response = msg.get()
+                    if response == _("Browse"):
+                        self._open_file_dialog_for_editor()
+                    elif response == _("Open Download Page"):
+                        webbrowser.open("https://notepad-plus-plus.org/downloads/")
+                    self.lift()
+                    self.focus_force()
+                    return
+            
+            # If it wasn't notepad++ or another error occurred on retry, show generic error
+            self.master.log(f"Editor executable not found at: {editor_path}", level="error")
+            CTkMessagebox(title=_("Error"), message=f"{_('Editor not found:')}{editor_path}", icon="cancel")
+
+        except Exception as e:
+            self.master.log(f"Failed to open config file {config_path} with {editor_path}: {e}", level="error")
+            CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
 
     def _browse_path(self, entry_widget, server_name):
         initial_dir = os.path.dirname(entry_widget.get()) if os.path.exists(entry_widget.get()) else os.getcwd()
@@ -1483,7 +1540,8 @@ class ConfigWindow(ctk.CTkToplevel):
             CTkMessagebox(title=_("Configuration Saved"), message=_("All server configurations saved successfully."), icon="check")
 
             self.modified_servers.clear()
-            self._update_server_list_indicators()
+            self.editor_path_modified = False
+            self._update_modified_indicators()
             
             for name, config in SERVER_CONFIG.items():
                 if name in ["auto_restart_enabled", "editor_path", "discord_webhook_url"]:
