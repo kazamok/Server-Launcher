@@ -93,6 +93,7 @@ TRANSLATIONS = {
     # ConfigWindow에 대한 새로운 번역
     "Select a server to configure its settings.": "설정할 서버를 선택하세요.",
     "Settings for: {} ": "{} 설정:",
+    "Configuration Files:": "설정 파일:", # New line
     "Process Name:": "프로세스 이름:",
     "Start Cmd:": "시작 명령어:",
     "Stop Cmd:": "정지 명령어:",
@@ -183,7 +184,12 @@ def load_config():
             "start_cmd": [r"C:\WISE\xampp\apache_start.bat"],
             "cwd": r"C:\WISE\xampp",
             "show_console": True,
-            "auto_restart": False
+            "auto_restart": False,
+            "config_paths": {
+                "httpd.conf": "C:/WISE/xampp/apache/conf/httpd.conf",
+                "httpd-ssl.conf": "C:/WISE/xampp/apache/conf/extra/httpd-ssl.conf",
+                "php.ini": "C:/WISE/xampp/php/php.ini"
+            }
         },
         "Backend": {
             "type": "process",
@@ -229,20 +235,31 @@ def load_config():
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             loaded_config = json.load(f)
-            # 로드된 설정에 새로운 키가 없으면 기본값으로 추가합니다.
+            
+            config_to_update = copy.deepcopy(loaded_config)
+
+            # 기본 설정의 키를 반복하여 로드된 설정에 누락된 키를 추가합니다.
+            for key, default_value in default_config.items():
+                if key not in config_to_update:
+                    # 최상위 키가 누락된 경우 (예: 새 서버 또는 'editor_path') 추가합니다.
+                    config_to_update[key] = default_value
+                elif isinstance(default_value, dict):
+                    # 키가 존재하고 값이 딕셔너리인 경우 (예: 서버 설정),
+                    # 하위 키가 누락되었는지 확인합니다.
+                    for sub_key, sub_default_value in default_value.items():
+                        if sub_key not in config_to_update[key]:
+                            config_to_update[key][sub_key] = sub_default_value
+            
+            loaded_config = config_to_update
+
+            # 이전 버전과의 호환성을 위해 start_cmd/stop_cmd를 목록으로 변환합니다.
             for server_name, server_data in loaded_config.items():
                 if isinstance(server_data, dict) and server_data.get("type") == "process":
                     if "start_cmd" in server_data and isinstance(server_data["start_cmd"], str):
                         server_data["start_cmd"] = [server_data["start_cmd"]]
                     if "stop_cmd" in server_data and isinstance(server_data["stop_cmd"], str):
                         server_data["stop_cmd"] = [server_data["stop_cmd"]]
-            # 로드된 설정에 새 키가 없으면 추가
-            if "auto_restart_enabled" not in loaded_config:
-                loaded_config["auto_restart_enabled"] = default_config["auto_restart_enabled"]
-            if "editor_path" not in loaded_config:
-                loaded_config["editor_path"] = default_config["editor_path"]
-            if "discord_webhook_url" not in loaded_config:
-                loaded_config["discord_webhook_url"] = default_config["discord_webhook_url"]
+
             logging.info(f"Configuration loaded from {CONFIG_FILE}")
             return loaded_config
 
@@ -1288,8 +1305,10 @@ class ConfigWindow(ctk.CTkToplevel):
             self.master.log(f"Error scanning for services: {e}", level="error")
             CTkMessagebox(title=_("Error"), message=str(e), icon="cancel")
 
-    def _open_config_file(self, server_name):
-        config_path = self.temp_config.get(server_name, {}).get("config_path")
+    def _open_config_file(self, server_name, config_path=None):
+        if config_path is None:
+            config_path = self.temp_config.get(server_name, {}).get("config_path")
+        
         editor_path = self.temp_config.get("editor_path", "notepad++.exe")
 
         if not editor_path:
@@ -1386,7 +1405,23 @@ class ConfigWindow(ctk.CTkToplevel):
             ctk.CTkLabel(guide_frame, text=_("If you run MySQL from a folder (e.g., XAMPP), choose 'process'."), 
                          font=ctk.CTkFont(family="맑은 고딕", size=12)).pack(anchor="w", padx=10, pady=(2, 5))
 
-        # --- 설정 경로 입력 및 버튼 ---
+        # --- Apache 전용 설정 파일 버튼 ---
+        if server_name == "Apache" and "config_paths" in config_data:
+            config_files_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
+            config_files_frame.pack(fill="x", padx=10, pady=5)
+            ctk.CTkLabel(config_files_frame, text=_("Configuration Files:"), font=ctk.CTkFont(family="맑은 고딕", size=12, weight="bold")).pack(anchor="w", pady=(0, 5))
+            
+            buttons_frame = ctk.CTkFrame(config_files_frame, fg_color="transparent")
+            buttons_frame.pack(fill="x")
+
+            for name, path in config_data["config_paths"].items():
+                btn = ctk.CTkButton(buttons_frame, text=name, 
+                                      command=lambda n=server_name, p=path: self._open_config_file(n, config_path=p),
+                                      font=ctk.CTkFont(family="맑은 고딕", size=12),
+                                      height=25, corner_radius=0)
+                btn.pack(side="left", padx=5, pady=2)
+
+        # --- 일반 설정 경로 입력 및 버튼 ---
         if "config_path" in config_data:
             row_frame = ctk.CTkFrame(self.details_frame, fg_color="transparent")
             row_frame.pack(fill="x", padx=10, pady=5)
