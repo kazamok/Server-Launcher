@@ -13,7 +13,12 @@
         ],
         "cwd": "C:\\WISE\\xampp",
         "show_console": true,
-        "auto_restart": false
+        "auto_restart": false,
+        "config_paths": {
+            "httpd.conf": "C:/WISE/xampp/apache/conf/httpd.conf",
+            "httpd-ssl.conf": "C:/WISE/xampp/apache/conf/extra/httpd-ssl.conf",
+            "php.ini": "C:/WISE/xampp/php/php.ini"
+        }
     },
     "Backend": {
         "type": "process",
@@ -60,6 +65,6 @@
         "auto_restart": false
     },
     "auto_restart_enabled": false,
-    "editor_path": "notepad++.exe",
+    "editor_path": "C:\\Program Files\\Notepad++\\notepad++.exe",
     "discord_webhook_url": ""
 }
