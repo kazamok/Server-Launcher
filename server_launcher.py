@@ -175,7 +175,7 @@ def load_config():
         "MySQL": {
             "type": "service",
             "service_name": "MySQL84",
-            "config_path": "C:/WISE/Xampp/mysql/bin/my.ini",
+            "config_path": "C:/ProgramData/MySQL/MySQL Server 8.4/my.ini",
             "auto_restart": False
         },
         "Apache": {
